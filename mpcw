@@ -93,7 +93,7 @@ read_config() {
 nonstop off
 filter off
 clean_every 1 month
-skip 2
+skip_limit 2
 voice on
 "
 	mkdir ~/.config/mpcw 2>/dev/null
@@ -250,10 +250,13 @@ __say() {
 	(! type espeak >/dev/null) || {
 	    local msg
 	    msg="...You are listening to: $(getinfo artist), $(getinfo title)... On $radio."
+	    local volume
+	    volume=$(read_config volume)
+	    local new_vol=$((volume-volume*30/100))
 	    espeak -v en+f4 -w $TMPWAV -s 140 2>/dev/null <<< echo "$msg"
-	    mpc -q volume -30
-	    mpv --no-terminal $TMPWAV
-	    mpc -q volume +30
+	    mpc -q volume  $new_vol
+	    mpv --no-terminal --volume "$volume" "$TMPWAV"
+	    mpc -q volume "$volume"
 	    rm $TMPWAV
 	}
     }
