@@ -1,0 +1,153 @@
+.\" Man page for mpcw
+.\" Contact teegre@icloud.com
+.TH man 8 "12 December 2019" "0.1" "MPCW man page"
+.SH NAME
+mpcw \- A wrapper for mpc.
+.SH SYNOPSIS
+mpcw [COMMAND]
+
+command
+
+.SH DESCRIPTION
+mpcw is a wrapper for Music Player Daemon's client, mpc.
+.br
+It enables notification on song change, "music non-stop" and playback statistics.
+.br
+It also provides many aliases/commands to easily control the music player from a terminal.
+
+.SH CONFIGURATION
+Add this line to your .shellrc file:
+.br
+.br
+source $HOME/.local/bin/mpcw
+.br
+.br
+The mpcw daemon is launched once you open a terminal.
+
+.SH COMMANDS
+Commands can be invoked directly from the command line.
+.br
+Also, it's possible to call mpcw functions (ie. as keyboard shortcuts in a tiling window manager), by entering:
+.br
+mpcw [COMMAND]
+.br
+.br 
+.TP
+PLAYBACK CONTROL:
+.br
+- play <track> (pl): start playback. If a track number is provided, play this track.
+.br
+- pause: pause/unpause playback.
+.br
+- toggle (p): play/pause.
+.br
+- stop (st): stop playback.
+.br
+- sta: stop playback when current song is over.
+.br
+- next (nx): go to next song.
+.br
+- prev (pv): go to previous song.
+.br
+- seek <position>: seek through current song (use percentage or H:M:S)
+.br
+.br
+.TP
+PLAYLIST CONTROL:
+.br
+- pls: display current playlist
+.br
+- hist: display song history (latest first)
+.br
+- add <file(s)>: add song(s) to the playlist (auto-completion enabled)
+.br
+- new <file(s)>: same as add, but clears the playlist before adding songs.
+.br
+- ins <file(s)>: insert song(s) after currently playing track.
+.br
+- del <track[-track]>: delete track(s) from the playlist.
+.br
+- cr: crop playlist. Delete all songs except the one playing.
+.br
+- clr: clear playlist.
+.br
+- see_album (seeal): display album.
+.br
+- see_artist (seear): display artist.
+.br
+.br
+.TP
+MUSIC NON-STOP:
+.br
+Music non-stop enables non-stop playback of songs or albums.
+.br
+Note: in song mode, consume, random, and crossfade are enabled.
+.br
+It's also possible to play songs/albums by artist, genre, date, etc.
+.br
+- musicnonstop <album|song|off> <tag value..tag value|off> (mns mnsa mnss mnso)
+.br
+.br
+example: play random pop songs from the '80s
+.br
+mns song genre pop date 198
+.br
+.br
+- play_album (pla): play current song's album.
+If song mode is enabled, go back to that mode when album is over.
+.br
+- next_album (nxa): play another album (album mode only)
+.br
+- add_album (aa): add current song's album.
+.br
+.br
+.TP
+VOLUME CONTROL:
+.br
+- vol <[+/-]value>: set volume. If no argument is given, display actual volume.
+.br
+- dim: decrease volume by 50% or set volume back to previous value.
+Volume can be dimmed only when a song is playing and it is disabled after pause or stop.
+.br
+.br
+.TP
+RATING SONG:
+.br
+- rating: show current rating.
+.br
+- love, like, tsok, soso, nope: rate the song 5, 4, 3, 2 or 1.
+.br
+.br
+- unrate: remove rating.
+.br
+.br
+.TP
+STATISTICS:
+.br
+- playcount: display how many times a song has been played.
+.br
+.br
+- lastplayed: display the last date and time the song was played.
+.br
+.br
+- skipcount; display how many times a song has been skipped.
+.br
+.br
+- reset_stats <file>: reset statistics of a given file.
+.br
+.br
+.SH "FILES"
+.PP
+~/.config/mpcw/config
+.RS 4
+Configuration file.
+.RE
+.PP
+~/.config/mpcw/hist
+.RS 4
+History file.
+.RE
+.PP
+~/.config/mpcw/mpcw.log
+.RS 4
+Log file.

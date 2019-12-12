@@ -1,0 +1,24 @@
+#! /usr/bin/bash
+
+mediatitle() {
+    op=~/.config/currentmedia
+    sts="$(awk '$1~"status"{print $2}' "$op")"
+    art=$(echo $(awk '$1~"artist"{for (i=2; i<=NF; i++) print $i}' "$op"))
+    ttl=$(echo $(awk '$1~"title"{for (i=2; i<=NF; i++) print $i}' "$op"))
+    
+    case "$sts" in
+      "[playing]") [[ -n $art ]] && echo " [>> $art: $ttl" || echo " [>> $ttl";;
+      "[paused]") [[ -n $art ]] && echo " [|| $art: $ttl" || echo " [|| $ttl";;
+      *) echo " [|]"
+    esac
+}
+
+scroll() {
+    killall zscroll 2>/dev/null
+    zscroll -b "|" -p " **" -l 50 -d 0.4 "$(mediatitle)" &
+}
+
+scroll
+trap scroll SIGHUP 
+
+while true; do read -r; done
