@@ -6,27 +6,29 @@
 # | '_ ` _ \| '_ \ / __\ \ /\ / / #
 # | | | | | | |_) | (__ \ V  V /  #
 # |_| |_| |_| .__/ \___| \_/\_/   #
-#           |_| version 0.1       #
+#           |_| version 0.2       #
 ###################################
 
 # ALIASES
 
 alias add="mpc add"
-alias new="stop; mpc clear; mpc add"
+alias new="mpc -q stop; mpc -q clear; mpc -q add"
 alias list="mpc ls"
 alias ins="mpc insert"
 alias del="mpc -q del"
 alias clr="mpc -q clear"
 alias cr="mpc -q crop"
 alias sta="mpc -q single" # stop after current
-alias rn="mpc -q random"
-alias cs="mpc -q consume"
+alias rn="mpc -q random; status random"
+alias rp="mpc -q repeat; status repeat"
+alias cs="mpc -q consume; status consume"
 alias rnd="getrnd"
-alias nx="next"
-alias pv="prev"
+alias nx="mpc -q next"
+alias pv="mpc -q prev"
 alias mns="musicnonstop"
 alias mnsa="musicnonstop album"
 alias mnss="musicnonstop song"
+alias mnsi="musinonstop sima"
 alias mnso="musicnonstop off"
 alias move="mpc -q move"
 alias xf="mpc crossfade"
@@ -40,281 +42,187 @@ alias pl="play"
 alias pla="play_album"
 alias aa="add_album"
 alias nxa="next_album"
-alias s="stop"
+alias s="mpc -q stop"
 alias sk="skip"
 alias usk="unskip"
 alias skl="set_skip_limit"
 alias seeal="see_album"
 alias seear="see_artist"
 alias seek="mpc -q seek"
-alias upd="((mpc -q update --wait && notify-send 'mpcw: update finished') &)"
+alias upd="((mpc -q update --wait && notify-send 'MPCW: Update finished') &)"
 
 # VARIABLES
 
-MPCW_CONFIG=~/.config/mpcw/config
-MPCW_HIST=~/.config/mpcw/hist
-MPCW_LOG=~/.config/mpcw/mpcw.log
-TMPSIMA=~/.config/mpcw/artists.tmp
-TMPWAV=~/.config/mpcw/saytmp.wav
-SIMA=~/.config/mpcw/artists
-STICKER_DB=~/.config/mpd/sticker.sql
-PID=~/.config/mpcw/mpcw.pid
-WPID=~/.config/mpcw/mpcw.wpid
-MPCW_LOCK=~/.config/mpcw/lock
-MPCW_NTF='
+declare -r MPCW_SETTINGS=$HOME/.config/mpcw/mpcw.settings
+declare -r MPCW_HIST=$HOME/.config/mpcw/mpcw.hist
+declare -r MPCW_LOG=$HOME/.config/mpcw/mpcw.log
+declare -r MPCW_SIMA=$HOME/.config/mpcw/mpcw.artists
+declare -r STICKER_DB=$HOME/.config/mpd/sticker.sql
+declare -r MPCW_LOCK=$HOME/.config/mpcw/mpcw.lock
+declare -r MPCW_NTF='
 %artist%
 %title%
 %album%
 [%date%]'
-MPCW_FMT='artist %artist%\ntitle %title%\nalbum %album%\ndate %date%'
+declare -r MPCW_FMT='artist %artist%\ntitle %title%\nalbum %album%\ndate %date%'
 
 #
 
 logme() {
-    echo "$(now) --- $*" >> $MPCW_LOG
+    echo "$(now) --- $*" >> "$MPCW_LOG"
 }
 
-read_config() {
+reads() {
     # read config file.
-    # create it if it doesn't exist.
-    if [ -s "$MPCW_CONFIG" ]; then
-      case "$1" in
-          "volume") awk 'NR==1 {print $2}' "$MPCW_CONFIG" ;;
-	  "nonstop") awk 'NR==2 {print $2}' "$MPCW_CONFIG" ;;
-	  "filter") awk -v OFS=" " 'NR==3 {for (i=2; i<=NF; i++) printf("%s ", $i)}' "$MPCW_CONFIG" ;;
-	  "clean") awk -v OFS=" " 'NR==4 {for (i=2; i<=NF; i++) printf("%s ", $i)}' "$MPCW_CONFIG" ;;
-	  "skip") awk 'NR==5 {print $2}' "$MPCW_CONFIG" ;;
-	  "voice") awk 'NR==6 {print $2}' "$MPCW_CONFIG" ;;
-	  *) return 1
-      esac
-    else
+    # create it with default values if it doesn't exist.
+    if ! [[ -a "$MPCW_SETTINGS" ]]; then
 	local settings
 	settings="volume 100
 nonstop off
 filter off
-clean_every 1 month
-skip_limit 2
-voice on
-"
-	mkdir ~/.config/mpcw 2>/dev/null
-        echo "$settings" > $MPCW_CONFIG
+clean 1 month
+skip 2
+voice off"
+	mkdir "$HOME/.config/mpcw" 2>/dev/null
+        echo "$settings" > "$MPCW_SETTINGS"
     fi
+    local result
+    result="$(sed -n "s/$1 //p" "$MPCW_SETTINGS")"
+    [[ -z "$result" ]] && return 1
+    echo "$result"
 }
 
-write_config() {
-    # write current config to file.
-    local settings
-    settings="volume $VOLUME
-nonstop $NONSTOP
-filter $NONSTOP_FILTER
-clean_every $CLEAN_FREQ
-skip_limit $SKIP_LIMIT
-voice $VOICE
-"
-    echo "$settings" > $MPCW_CONFIG
+writes() {
+    # write setting to file.
+    [[ -n "$*" && -n "$2" ]] && {
+	local opt="$1"
+        shift
+        local val="$*"
+	sed -i "s/^$opt\s[a-zA-Z0-9].*/$opt $val/" "$MPCW_SETTINGS"
+	return 0
+    } || return 1
 }
 
 media_update() {
         {
 	    echo "status" "$(pstatus)"
             mpc current -f "$MPCW_FMT"
-        } > ~/.config/currentmedia
+        } > "$HOME/.config/currentmedia"
 
-        kill -1 "$(pidof -x "pmt")" 2>/dev/null
-}
-
-do_loop() {
-    # main loop.
-    # triggered each time a player event occurs.
-    # it takes care of displaying notifications,
-    # and handles playlist.
-    while read -r; do
-
-	S="$(pstatus)"
-	icon="$(pstatus icon)"
-
-	media_update
-
-        if [[ "$(status single)" == "on" ]]; then
-	    mpc -q single off
-	elif ! [[ -a "$MPCW_LOCK" ]]; then
-	    handle_playlist
-	fi
-
-        NONSTOP=$(read_config nonstop)
-
-	if [[ "$S" != "[stopped]" ]]; then
-	    (($(playcount)))
-	    notify-send -u low "$icon x$playcount $(mpc current -f "$MPCW_NTF") $(rating s)"
-	    local n=$((RANDOM%10))
-	    [[ $n == 5 ]] && sleep 5 && __say
-	elif [[ "$NONSTOP" == "off" ]]; then
-	    notify-send -u low "$icon"
-	fi
-
-    done < <(mpc idleloop player 2>/dev/null)
-}
-
-startd() {
-    # start mpcw as a daemon.
-    # if we have a pid file
-    [[ -a $PID ]] && {
-	# check if there is an active process with this id
-	    local pid
-	    pid="$(cat "$PID")"
-	    # if so, we do nothing
-	    [[ "$(ps --no-headers --pid "$pid")" ]] && return
-	}
-    # otherwise, we start the daemon
-    rm $PID 2>/dev/null
-    rm $WPID 2>/dev/null
-    __clean
-    do_loop & 
-    disown
-    echo $! > "$PID"
-    __watch &
-    disown
-    echo $! > "$WPID"
-    [[ "$(pstatus)" != "[stopped]" ]] && 
-	media_update
-	    clear
-	    echo "[>> mpcw daemon has started."
-	}
-
-# Stop daemon.
-stopd() {
-    if [[ -a $PID ]]; then
-	local pid
-	local ppid
-	local wpid
-	local wppid
-	pid="$(cat "$PID")"
-	wpid="$(cat "$WPID")"
-	rm "$PID"
-	rm "$WPID"
-	ppid="$(ps --no-headers --ppid "$pid" | awk '{print $1}')"
-	wppid="$(ps --no-headers --ppid "$wpid" | awk '{print $1}')"
-	kill "$ppid" 2>/dev/null
-	kill "$wppid" 2>/dev/null
-	kill "$pid" 2>/dev/null
-	sleep 1
-	echo  > ~/.config/currentmedia
-	kill -1 "$(pidof -x "pmt")" 2>/dev/null
-	echo "[|] mpcw daemon has stopped."
-    else
-	echo "[X] mpcw daemon is not running."
-    fi
-}
-
-__watch() {
-    # playback statistics updater
-    local song
-    local duration
-    local elapsed
-    logme "DAEMON: started."
-    while :; do
-	if ! [[ -a $PID ]]; then
-	    logme "DAEMON: stopped."
-	    return 0
-	fi
-	if [[ "$(pstatus)" == "[playing]" ]]; then
-	    song="$(getinfo file)"
-	    duration="$(echo 'status\n' | nc localhost 6600 | awk '$1~"duration" {print $2}')"
-	    duration=${duration//.*}
-	    ((duration-=1))
-	    elapsed="$(echo 'status\n' | nc localhost 6600 | awk '$1~"elapsed" {print $2}')"
-	    elapsed=${elapsed//.*}
-	    if [[ "$elapsed" == "$duration"  && -n "$song" ]]; then
-		update_stats "$song"
-		echo "$(now) --- $song" >> $MPCW_HIST
-		mpc idle player >/dev/null
-	    else
-                sleep 0.125
-            fi
-	else
-	    __clean
-            mpc idle player >/dev/null
-	fi
-    done
+        kill -1 "$(pidof -x "mpcwt")" 2>/dev/null
 }
 
 __say() {
     # say current artist and title.
-    [[ $(pstatus) != "[playing]" ]] && return 1
+    [[ $(reads voice) == "off" ]] && return
+    [[ $(pstatus) != "[playing]" ]] && return
+    [[ $(getinfo album) == "MNSR Jingles" ]] && return
+    local TMPWAV=$HOME/.config/mpcw/saytmp.wav
     local radio
-    case "$(read_config nonstop)" in
+    case "$(reads nonstop)" in
 	"song") radio="MUSIC NON STOP RADIO";;
 	"sima") radio="SIMA RADIO";;
     esac
     [[ -n "$radio" ]] && {
 	(! type espeak >/dev/null) || {
+	    local artist
+	    artist="$(getinfo artist)"
+	    local title
+	    title="$(getinfo title)"
 	    local msg
-	    msg="...You are listening to: $(getinfo artist), $(getinfo title)... On $radio."
-	    local volume
-	    volume=$(read_config volume)
-	    local new_vol=$((volume-volume*30/100))
-	    espeak -v en+f4 -w $TMPWAV -s 140 2>/dev/null <<< echo "$msg"
-	    mpc -q volume  $new_vol
-	    mpv --no-terminal --volume "$volume" "$TMPWAV"
-	    mpc -q volume "$volume"
-	    rm $TMPWAV
+	    msg="...You are listening to: $artist, $title... On $radio."
+	    espeak -v en+f4 -w "$TMPWAV" -s 140 2>/dev/null <<< echo "$msg"
+	    if [[ "$title" == "$(getinfo title)" && $(pstatus) == "[playing]" ]]; then
+		local volume
+		volume=$(reads volume)
+		local new_vol=$((volume-volume*30/100))
+		mpc -q volume  "$new_vol"
+		mpv --no-terminal --volume "$volume" "$TMPWAV"
+		mpc -q volume "$volume"
+		rm "$TMPWAV"
+	    fi
 	}
     }
 }
 
 __clean() {
     local freq
-    freq="$(read_config clean)"
+    freq="$(reads clean)"
     local date
     date=$(date -d "now -$freq" "+%Y-%m-%d")
-    cp $MPCW_HIST $MPCW_HIST.backup
-    sed -i "/^$date/d" $MPCW_HIST
-    if [[ -n $(diff "$MPCW_HIST" "$MPCW_HIST.backup") ]]; then
-	 logme "cleaned history."
+    cp "$MPCW_HIST" "$MPCW_HIST.backup"
+    awk $'$1 > '"$date"'' "$MPCW_HIST" > "$MPCW_HIST.tmp"
+    if [[ -n $(diff "$MPCW_HIST.tmp" "$MPCW_HIST.backup") ]]; then
+	 logme "cleaned history entries older than $date."
+	 rm "$MPCW_HIST"
+	 mv "$MPCW_HIST.tmp" "$MPCW_HIST"
+    else
+	rm "$MPCW_HIST.tmp"
     fi
 
 }
 
 clean_freq() {
-    # TODO: check user input
+    local error
     if [ "$*" ]; then
-	CLEAN_FREQ="$1"
-	write_config
+	local arg1
+	local arg2
+	if [[ "$1" =~ ^[0-9]+$ ]]; then
+	    arg1="$1"
+	    if [[ "$2" =~ ^day[s]\?$\|^week[s]\?$\|^month[s]\?$\|^year[s]\?$ ]]; then
+		arg2="$2"
+	    else
+		error=1
+	    fi
+	else
+	    error=1
+	fi
     else
-	echo "mpcw: no argument."
+	error=1
+    fi
+    if [[ "$error" == 1 ]]; then
 	echo "usage: clean_freq <num [day(s)|week(s)|month(s)|year(s)>"
+    else
+	writes clean "$arg1" "$arg2"
     fi
 }
 
 toggle() {
-    case "$(pstatus)" in
-        "[paused]") __fadein;;
-        "[playing]") __fadeout;;
-        *) play
-   esac
+    if [[ "$(pstatus)" == "[stopped]" ]]; then
+	play "$@"
+    else
+	mpc -q toggle
+    fi
+}
+
+pause() {
+    if [[ "$(pstatus)" == "[playing]" ]]; then
+	mpc -q pause
+    else
+        play
+    fi
 }
 
 play() {
-    echo > $MPCW_LOCK
+    echo > "$MPCW_LOCK"
     local volume
-    volume="$(read_config volume)"
-    NONSTOP="$(read_config nonstop)"
-    if [[ "$(pstatus)" == "[paused]" ]]; then
-        __fadein
-    elif [[ "$(pstatus)" == "[stopped]" ]] && [[ $NONSTOP != "off" ]]; then
+    local nonstop
+    volume="$(reads volume)"
+    nonstop="$(reads nonstop)"
+    if [[ "$(pstatus)" == "[stopped]" ]] && [[ $nonstop != "off" ]]; then
         if ! handle_playlist; then
             mpc -q --wait play "$@"
-	    sleep 0.0625
-            mpc -q volume "$volume"
+	    sleep 0.1
+	    mpc -q volume "$volume"
 	fi
     else
 	mpc -q random off
 	mpc -q crossfade 0
         mpc -q --wait play "$@"
-	sleep 0.0625
-        mpc -q volume "$volume"
+	sleep 0.1
+	mpc -q volume "$volume"
     fi
-    rm $MPCW_LOCK 2>/dev/null
+    rm "$MPCW_LOCK" 2>/dev/null
 }
 
 play_album() {
@@ -337,30 +245,10 @@ play_album() {
 	    mpc -q play 1
         fi
 	mpc -q replaygain album
-	VOICE="off"; write_config
-	echo "mpcw: now playing album: $(mpc current -f "%artist% - %album%")"
+	writes voice off
+	echo "MPCW: now playing album: $(mpc current -f "%artist% - %album%")"
     else
-        echo "mpcw: not playing."
-    fi
-}
-
-next() {
-    if [[ "$(pstatus)" == "[paused]" ]]; then
-	mpc -q --wait next
-	mpc -q pause
-	__fadein
-    else
-	mpc -q next
-    fi
-}
-
-prev() {
-    if [[ "$(pstatus)" == "[paused}" ]]; then
-	mpc -q --wait prev
-	mpc -q pause
-	__fadein
-    else
-	mpc -q prev
+        echo "MPCW: not playing."
     fi
 }
 
@@ -376,8 +264,8 @@ add_album() {
 	mpc -q crop
 	mpc -q add "$album"
 	[[ "$(getinfo track)" == 1 ]] && mpc -q del 2
-	echo "mpcw: added album: $(mpc current -f "%artist% - %album%")"
-	VOICE="off"; write_config
+	echo "MPCW: added album: $(mpc current -f "%artist% - %album%")"
+	writes voice off
     fi
 }
 
@@ -386,7 +274,7 @@ see_album() {
     if [[ $(pstatus) != "[stopped]" ]]; then
         album="$(getinfo file)"
 	album="${album%/*}"
-	mpc ls "$album"
+	mpc ls "$album" | less -F
    fi
 }
 
@@ -395,24 +283,17 @@ see_artist() {
     if [[ $(pstatus) != "[stopped]" ]]; then
         artist="$(getinfo file)"
 	artist="${artist%%/*}"
-	mpc ls "$artist"
-    fi
-}
-
-pause() {
-    if [[ $(pstatus) == "[paused]" ]]; then
-        toggle
-    else
-        __fadeout "pause"
+	mpc ls "$artist" | less -F
     fi
 }
 
 next_album() {
-    if [[ $(pstatus) == "[playing]" ]] &&
-      [[ $(read_config nonstop) == "album" ]]; then
-	clr
+    if [[ $(pstatus) == "[playing]" &&
+	$(reads nonstop) == "album" ]]; then
+        mpc -q stop
+	mpc -q clear
     else
-	echo "mpcw: not in album mode!"
+	echo "MPCW: not in album mode!"
     fi
 }
 
@@ -439,6 +320,7 @@ search() {
 }
 
 search_tag() {
+    local error
     if [ "$*" ]; then
         if ! ( mpc search "$@" 2>/dev/null ); then
 	    error=1
@@ -450,13 +332,14 @@ search_tag() {
     fi
     [[ "$error" -eq 1 ]] &&
     (
-	echo "mpcw: <$*> did not return any result!"
+	echo "MPCW: <$*> did not return any result!"
 	echo "usage: search_tag <tag value ... tag value>"
 	return 1
     )
 }
 
 find_tag() {
+    local error
     if [ "$*" ]; then
 	if ! (mpc find "$@" 2>/dev/null); then
 	    error=1
@@ -467,7 +350,7 @@ find_tag() {
 	error=1
     fi
     [[ "$error" -eq 1 ]] && {
-	echo "mpcw: <$*> did not return any result!"
+	echo "MPCW: <$*> did not return any result!"
 	echo "usage: search_tag <tag value ... tag value>"
 	return 1
     }
@@ -503,60 +386,88 @@ skip() {
     ((skipcount+=1))
     mpc sticker "$1" set "lastplayed" "$(now)" 2>/dev/null
     mpc sticker "$(getinfo file)" set "skipcount" "$skipcount" 2>/dev/null
-    next
+    mpc -q next
 }
 
 unskip() {
-    mpc sticker "$1" set "skipcount" 0 2>/dev/null
+    local song
+    if [[ -z "$1" ]]; then
+	song="$(getinfo file)"
+    else
+	song="$1"
+    fi
+    mpc sticker "$song" set "skipcount" 0 2>/dev/null
 }
 
 set_skip_limit() {
     if [[ $1 =~ ^[0-9]+$ ]]; then
-	SKIP_LIMIT=$1; write_config
+	writes skip "$1"
     else
-	echo "mpcw: skip_limit=$(read_config skip)"
+	echo "MPCW: skip_limit=$(reads skip)"
     fi
 }
 
 stop() {
-    if [[ "$(pstatus)" == "[playing]" ]]; then
-      __fadeout "stop"
-    else
-      mpc -q stop
-    fi
+    mpc -q stop
 }
 
 vol() {
-    if [ -z "$1" ]; then
-      read_config volume
-    elif [[ "$(pstatus)" != "[stopped]" ]]; then
-      mpc -q volume "$1"
-      VOLUME="$(status volume)"
-      write_config
-    else
-      VOLUME="$1"
-      write_config
+    local notify=1
+    if [[ "$1" == "-n" ]]; then
+	notify=0
+	shift
     fi
+    if [ -z "$1" ]; then
+	reads volume
+    elif [[ "$(pstatus)" != "[stopped]" ]]; then
+	mpc -q volume "$1"
+	writes volume "$(status volume)"
+    elif [[ "$1" =~ ^[\+\|\-] ]]; then
+	    local volume
+	    volume="$(reads volume)"
+	    ((volume+=$1))
+	    [[ "$volume" -gt 100 ]] && volume=100
+	    [[ "$volume" -lt 0 ]] && volume=0
+	    writes volume "$volume"
+    else
+	writes volume "$1"
+    fi
+    [[ "$notify" == 0 ]] &&
+	notify-send -u normal -t 1000 "MPCW: Volume $(reads volume)%" 
 }
 
 dim() {
     # -6dB dimmer.
     [[ $(pstatus) == "[stopped]" || $(pstatus) == "[paused]" ]] &&
 	{
-	    echo "mpcw: not playing"
+	    echo "MPCW: not playing"
     	    return
 	}
     local current_volume
     local saved_volume
     current_volume="$(status volume)"
-    saved_volume="$(read_config volume)"
+    saved_volume="$(reads volume)"
     if [[ $current_volume -lt $saved_volume ]]; then
 	mpc -q volume "$saved_volume"
-	echo "mpcw: dim off"
+	if [[ -z "$1" ]]; then
+	    echo "MPCW: dim off."
+	elif [[ "$1" == "-n" ]]; then
+	    notify-send -u normal -t 1000 "MPCW: dim off"
+	else
+	    echo "MPCW: dim off."
+	    echo "usage: dim [-n]"
+	fi
     elif [[ $current_volume -eq $saved_volume ]]; then
 	((current_volume/=2))
 	mpc -q volume $current_volume
-	echo "mpcw: dim on"
+	if [[ -z "$1" ]]; then
+	    echo "MPCW: dim on"
+	elif [[ "$1" == "-n" ]]; then
+	    notify-send -u normal -t 1000 "MPCW: dim on"
+	else
+	    echo "MPCW: dim on."
+	    echo "usage: dim [-n]"
+	fi
    fi
 }
 
@@ -599,8 +510,8 @@ getrnd() {
 			while read -r line; do
 			    (($(mpc sticker "$line" get "skipcount" 2>/dev/null)))
 			    skc=${skipcount:-0}
-			    skl=$(read_config "skip")
-			    [[ $skc -gt $skl ]] && continue
+			    skl=$(reads "skip")
+			    [[ $skc -ge $skl ]] && continue
 			    [[ $(__is_in_history "$line") == 0 ||
 				$(__is_in_playlist "$line") == 0 ]] ||
 			    { 
@@ -615,9 +526,9 @@ getrnd() {
 		    while [ $i -lt "$count" ]; do
 			while read -r line; do
 			    (($(mpc sticker "$line" get "skipcount" 2>/dev/null)))
-			    skipcount=${skipcount:-0}
-			    skiplimit=$(read_config "skip")
-			    [[ $skipcount -ge $skiplimit ]] && continue
+			    skc=${skipcount:-0}
+			    skl=$(reads "skip")
+			    [[ $skc -ge $skl ]] && continue
 			    [[ $(__is_in_history "$line") == 0 ||
 				$(__is_in_playlist "$line") == 0 ]] ||
 			    {
@@ -647,12 +558,13 @@ __icchk() {
 }
 
 __getsima() {
-    [[ -a $SIMA ]] && rm $SIMA
+    #TODO: Save artists
+    [[ -a "$MPCW_SIMA" ]] && rm "$MPCW_SIMA"
     wget -q \
 	"http://ws.audioscrobbler.com/2.0/?method=artist.getsimilar&artist=$1&api_key=744b5c9d5eae3289a03548b59bfe137a&format=json" \
-	--output-document="$TMPSIMA"
-    jq '.. | objects | .name // empty' $TMPSIMA | sed 's/\"//g' > $SIMA
-    rm $TMPSIMA
+	--output-document="/tmp/artists.tmp"
+    jq '.. | objects | .name // empty' "/tmp/artists.tmp" | sed 's/\"//g' > "$MPCW_SIMA"
+    rm "/tmp/artists.tmp"
 }
 
 getsima() {
@@ -660,24 +572,24 @@ getsima() {
     # if no songs are found, pick a random one.
     logme "GETSIMA: getsima called for $1."
     if ! __icchk; then
-	echo "mpcw: no internet connection!"
-	echo "mpcw: SIMA mode needs access to the internet..."
+	echo "MPCW: no internet connection!"
+	echo "MPCW: SIMA mode needs access to the internet..."
+	logme "GETSIMA: no internet!"
 	return 1
     fi
     __getsima "$1"
-    [[ -s  $SIMA ]] && {
+    [[ -s  "$MPCW_SIMA" ]] && {
 	local n=0
     	declare -a data
 	while read -r line; do
 	    data+=("$line")
-	done < "$SIMA"
+	done < "$MPCW_SIMA"
 	for artist in "${data[@]}"; do
 	    while :; do
 		song="$(find_tag artist "$artist" | shuf -n 1)"
 		if [[ -n "$song" ]]; then
 		    if ! [[ $(__is_in_history "$song") == 0 &&
 			$(__is_in_playlist "$song") == 1 ]]; then
-		    
 			echo "$song"
 			((n++))
 			break
@@ -690,35 +602,39 @@ getsima() {
 	    done
         done
 	unset data
-	rm $SIMA
+	rm "$MPCW_SIMA"
 	[[ $n -gt 0 ]] && {
 	    logme "GETSIMA: found $n songs."
             return
 	}
     }
-    mpc listall | shuf -n 1
+#    mpc listall | shuf -n 1
     logme "GETSIMA: no song were found."
 }
 
 musicnonstop() {
     # enable non-stop mode 
     case "$1" in
-      "album") NONSTOP="album"; write_config;;
-      "song") NONSTOP="song"; write_config;;
-      "sima") NONSTOP="sima"; write_config;;
-      "off") NONSTOP="off"; write_config; rpg auto;;
-      "help") echo "usage: musicnonstop [album|song] <tag value...tag value>"; return ;;
-      *) echo "music non-stop: $(read_config nonstop) | filter: $(read_config filter)"; return
+	album) writes nonstop album;;
+	song) writes nonstop song;;
+	sima) writes nonstop sima;;
+	off) writes nonstop off;;
+	help) echo "usage: musicnonstop [album|song|sima] <tag value...tag value>"; return ;;
+	*) echo "music non-stop: $(reads nonstop) | filter: $(reads filter)"; return
     esac
     shift
     if [ "$*" ]; then
-        NONSTOP_FILTER="$*"
-	write_config
+	if [[ "$(reads nonstop)" == "sima" ]]; then
+	    echo "music non-stop: no filter allowed in sima mode."
+	    echo "music non-stop: setting to <off>."
+	    writes filter off
+	else
+	    writes filter "$*"
+	fi
     else
-	NONSTOP_FILTER="off"
-	write_config
+	writes filter off
     fi
-    echo "music non-stop: $(read_config nonstop) | filter: $(read_config filter)"
+    echo "music non-stop: $(reads nonstop) | filter: $(reads filter)"
 }
 
 pls() {
@@ -727,17 +643,17 @@ pls() {
     local PLAYLIST
     local cols
     cols=$(tput cols)
-    local PLAYLIST=~/.config/mpcw/playlist
+    local PLAYLIST=$HOME/.config/mpcw/playlist
     pos="$(mpc current -f "%position%")"
     fmt="%artist% \ %title% \ %album%"
-    mpc playlist -f "$fmt" | awk '{print NR "\\" $0}' | sed "s/^$pos\\\/[>\\\/" > $PLAYLIST
+    mpc playlist -f "$fmt" | awk '{print NR "\\" $0}' | sed "s/^$pos\\\/[>\\\/" > "$PLAYLIST"
 
     column \
         -d -N "pos,artist,title,album" \
 	-T "artist,title,album" \
 	-c "$cols" \
-	-t -s "\\" -o "| " $PLAYLIST | less -F
-    rm $PLAYLIST 2>/dev/null
+	-t -s "\\" -o "| " "$PLAYLIST" | less -F
+    rm "$PLAYLIST" 2>/dev/null
 }
 
 hist() {
@@ -747,24 +663,39 @@ hist() {
 handle_playlist() {
     # handle playlist in non-stop mode
     local mode
-    mode="$(read_config nonstop)"
+    mode="$(reads nonstop)"
     if [[ "$mode" != "off" ]] && [[ -z "$(getnext file)" || -z "$(pls)" ]]; then
         case "$mode" in
             "album")
-		getrnd 1 album $(read_config filter) | mpc -q add 2>/dev/null
+		local filter
+		if [[ "${SHELL##*/}" == "zsh" ]]; then
+		    #shellcheck disable=SC2207
+		    filter=( $(reads filter) )
+		else
+		    read -ra filter <<< "$(reads filter)"
+		fi
+		getrnd 1 album "${filter[@]}" | mpc -q add 2>/dev/null
 		mpc replaygain album
 		mpc -q crossfade 0
 		mpc -q consume on
 		mpc -q random off
+		writes voice off
 		;;
 	    "song")
-		getrnd 10 song $(read_config filter) | mpc -q add 2>/dev/null
+		local filter
+		if [[ "${SHELL##*/}" == "zsh" ]]; then
+		    #shellcheck disable=SC2207
+		    filter=( $(reads filter) )
+		else
+		    read -ra filter <<< "$(reads filter)"
+		fi
+		getrnd 10 song "${filter[@]}" | mpc -q add 2>/dev/null
 		mpc -q ls mnsr/jingles | shuf -n 1 | mpc -q add 2>/dev/null
 		mpc replaygain track;
 		mpc -q crossfade 10
 		mpc -q consume on
 		mpc -q random on
-		VOICE="on"; write_config
+		writes voice on
 		;;
 	    "sima")
 		# SIMilar Artist mode:
@@ -777,9 +708,9 @@ handle_playlist() {
 		    getrnd 1 song | mpc -q add 2>/dev/null
 		    mpc -q random off
 		    mpc -q --wait play
-		    sleep 0.0625
-		    mpc -q volume "$(read_config volume)"
-		    notify-send -u normal "mpcw: started $(getinfo artist) radio."
+		    sleep 0.1
+		    mpc -q volume "$(reads volume)"
+		    notify-send -u normal $'MPCW:\n'"$(getinfo artist)"' radio.'
 		    logme "SIMA: added [$(getinfo artist): $(getinfo title)]"
 		    sleep 2
 		    getsima "$(getinfo artist)" | mpc -q add 2>/dev/null
@@ -789,16 +720,16 @@ handle_playlist() {
 		    if [[ -a "$MPCW_LOCK" ]]; then
 			logme "SIMA: there's a lock!"
 			mpc -q --wait play
-			sleep 0.0625
-			mpc -q volume "$(read_config volume)"
+			sleep 0.1
+			mpc -q volume "$(reads volume)"
 			sleep 2
 			getsima "$(getinfo artist)" | mpc -q add 2>/dev/null
-			notify-send -u normal "mpcw: started $(getinfo artist) radio."
+			notify-send -u normal $'MPCW:\n'"$(getinfo artist)"' radio.'
 		    else
 			getrnd 1 song | mpc -q add 2>/dev/null
 			logme "SIMA: added [$(getnext artist): $(getnext title)]"
 			getsima "$(getnext artist)" | mpc -q add 2>/dev/null
-			notify-send -u normal "mpcw: coming next: $(getnext artist) radio."
+			notify-send -u normal $'MPCW: Coming next:\n'"$(getnext artist)"' radio.'
 		    fi
 		else
 		    logme "SIMA: there is a next song, nothing to do."
@@ -807,15 +738,15 @@ handle_playlist() {
 		mpc -q crossfade 10
 		mpc -q consume on
 		mpc -q random on
-		VOICE="on"; write_config
+		writes voice on
 		;;
 	    *) echo "nonstop: err: something's wrong. [$mode]" >&2
         esac
         [[ "$(pstatus)" == "[stopped]" ]] && {
 	    local volume
-	    volume="$(read_config volume)"
+	    volume="$(reads volume)"
             mpc -q --wait play
-	    sleep 0.0625
+	    sleep 0.1
             mpc -q volume "$volume"
         }
     else
@@ -823,6 +754,7 @@ handle_playlist() {
     fi
 }
 
+#shellcheck disable=SC2120
 rating() {
     local rating
     local song
@@ -842,7 +774,7 @@ rating() {
 	    5) echo "*****"
 	esac
     else
-	echo "mpcw: $song ($r)"
+	echo "MPCW: $song ($r)"
     fi
 }
 
@@ -900,34 +832,6 @@ now() {
     date '+%Y-%m-%d %H:%M:%S'
 }
 
-__fadein() {
-	local V=0
-	local volume
-       	volume=$(read_config volume)
-	mpc -q --wait toggle
-	mpc -q volume 0
-	while [ "$V" -le "$volume" ]; do
-	  mpc -q volume "$V"
-	  ((V+=10))
-	  sleep 0.0625
-	done
-}
-__fadeout() {
-    local volume
-    volume="$(status volume)"
-    [[ "$volume" == "n/a" ]] && return
-    while [ "$volume" -ge 0 ]; do
-        mpc -q volume "$volume"
-        ((volume-=10))
-        sleep 0.0625
-    done
-    case "$1" in
-        "pause") mpc -q pause ;;
-        "stop") mpc -q stop ;;
-        *) mpc -q pause
-    esac
-}
-
 status() {
     if [[ -n "$1" ]]; then
         case "$1" in
@@ -939,8 +843,8 @@ status() {
 	    "consume") arg="\$10";;
 	    "progress") mpc | awk 'NR==2 {print $3}'; return;;
 	    "help")
-		echo "mpcw: options are"
-	       	echo "mpcw: current, volume, repeat, random, single, consume, progress]"
+		echo "MPCW: options are"
+	       	echo "MPCW: current, volume, repeat, random, single, consume, progress."
 		return
 		;;
             *) return
@@ -958,48 +862,29 @@ status() {
 }
 
 pstatus() {
-    local command
-    command=$(mpc | awk 'NR==2 {print $1}')
-    command=${command:-"[stopped]"}
+    local player_status
+    player_status=$(mpc | awk 'NR==2 {print $1}')
+    player_status=${player_status:-"[stopped]"}
     [[ -z "$1" ]] && {
-        echo "$command"
+        echo "$player_status"
         return
     }
     if [[ "$1" == "icon" ]]; then
-        case "$command" in 
+        case "$player_status" in 
             "[playing]") icon="[>>";;
             "[paused]") icon="[||";;
-	    *) icon="[|]"
+	    "[stopped]") icon="[|]"
         esac
-	NONSTOP="$(read_config nonstop)"
+	NONSTOP="$(reads nonstop)"
 	case "$NONSTOP" in
-	    "album") icon+="<Z=";;
-	    "song") icon+="<Z-"
+	    "album") icon+=" (=)";;
+	    "song") icon+=" (-)";;
+	    "sima") icon+=" (s)"
 	esac
     fi
     echo "$icon"
 }
 
-VOLUME=$(read_config "volume")
-VOLUME=${VOLUME:-100}
-
-NONSTOP=$(read_config "nonstop")
-NONSTOP=${NONSTOP:-"off"}
-
-NONSTOP_FILTER=$(read_config "filter")
-NONSTOP_FILTER=${NONSTOP_FILTER:-"off"}
-
-CLEAN_FREQ=$(read_config "clean")
-CLEAN_FREQ=${CLEAN_FREQ:-"1 month"}
-
-SKIP_LIMIT=$(read_config "skip")
-SKIP_LIMIT=${SKIP_LIMIT:-"2"}
-
-VOICE=$(read_config "voice")
-VOICE=${VOICE:-on}
-
 if [[ "$*" ]]; then
-    "$@"
-else
-    startd
+    "${@:-}"
 fi

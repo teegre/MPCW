@@ -1,0 +1,138 @@
+#! /usr/bin/env bash
+
+########################################
+#                                   _  # 
+#  _ __ ___  _ __   _____      ____| | #
+# | '_ ` _ \| '_ \ / __\ \ /\ / / _` | #
+# | | | | | | |_) | (__ \ V  V / (_| | #
+# |_| |_| |_| .__/ \___| \_/\_/ \__,_| #
+#           |_|                        #
+########################################
+
+declare -r MPCW_PID=$HOME/.config/mpcw/mpcw.pid
+declare -r MPCW_WPID=$HOME/.config/mpcw/mpcw.wpid
+
+#shellcheck source="$HOME/.local/bin/mpcw"
+. "$HOME/.local/bin/mpcw"
+
+main() {
+    while read -r; do
+
+	media_update
+
+	if [[ "$(status single)" == "on" ]]; then
+	    mpc -q single off
+	elif ! [[ -a "$MPCW_LOCK" ]]; then
+	    handle_playlist
+	fi
+
+	local nonstop
+	nonstop="$(reads nonstop)"
+	local icon
+	icon="$(pstatus icon)"
+
+	if [[ "$(pstatus)" != "[stopped]" ]]; then
+	    (($(playcount)))
+	    playcount=${playcount:-0}
+	    notify-send -u low "$icon x$playcount $(mpc current -f "$MPCW_NTF") $(rating s)"
+	    local n=$((RANDOM%10))
+	    [[ $n == 5 ]] && sleep 5 && __say
+	elif [[ "$nonstop" == "off" ]]; then
+	    notify-send -u low "$icon"
+	fi
+
+    done < <(mpc idleloop player 2>/dev/null)
+}
+
+__watch() {
+    local song
+    local duration
+    local elapsed
+    
+    logme "DAEMON: started."
+
+    while :; do
+	if ! [[ -a "$MPCW_PID" ]]; then
+	    logme "DAEMON: stopped."
+	    return 0
+	fi
+        if [[ "$(pstatus)" == "[playing]" ]]; then
+	    song="$(getinfo file)"
+	    duration="$(printf 'status\n;exit\n' | nc localhost 6600 | awk '$1~"duration" {print $2}')"
+	    duration=${duration//.*}
+	    ((duration-=1))
+	    elapsed="$(printf 'status\n;exit\n' | nc localhost 6600 | awk '$1~"elapsed" {print $2}')"
+	    elapsed=${elapsed//.*}
+	    if [[ "$elapsed" == "$duration" && -n "$song" ]]; then
+		update_stats "$song"
+		echo "$(now) --- $song" >> "$MPCW_HIST"
+		mpc idle player >/dev/null
+	    else
+		sleep 0.125
+	    fi
+	else
+	    __clean
+	    mpc idle player >/dev/null
+	fi
+    done
+}
+
+start() {
+    [[ -a "$MPCW_PID" ]] && {
+	local pid
+        pid="$(cat "$MPCW_PID")"
+	[[ "$(ps --no-headers --pid "$pid")" ]] && {
+	    echo "[>> mpcw daemon is activated."
+            return 1
+	}
+    }
+
+    rm "$MPCW_PID" 2>/dev/null
+    rm "$MPCW_WPID" 2>/dev/null
+
+    __clean
+
+    main &
+    disown
+    echo $! > "$MPCW_PID"
+
+    __watch &
+    disown
+    echo $! > "$MPCW_WPID"
+
+    [[ "$(pstatus)" != "[stopped]" ]] && media_update
+
+    echo "[>> mpcw daemon started."
+    return 0
+}
+
+stop() {
+    if [[ -a "$MPCW_PID" ]]; then
+	local pid
+	local ppid
+	local sppid
+	local wpid
+	local wppid
+	pid="$(cat "$MPCW_PID")"
+	wpid="$(cat "$MPCW_WPID")"
+	rm "$MPCW_PID"
+	rm "$MPCW_WPID"
+	ppid="$(ps --no-headers --ppid "$pid" | awk '{print $1}')"
+	sppid="$(ps --no-headers --ppid "$ppid" | awk '{print $1}')"
+	wppid="$(ps --no-headers --ppid "$wpid" | awk '{print $1}')"
+	kill "$sppid" 2>/dev/null
+	kill "$ppid" 2>/dev/null
+	kill "$wppid" 2>/dev/null
+	kill "$pid" 2>/dev/null
+	sleep 1
+	echo  > "$HOME/.config/currentmedia"
+	kill -1 "$(pidof -x "mpcwt")" 2>/dev/null
+	echo "[|] mpcw daemon stopped."
+	return 0
+    else
+	echo "[x] mpcw daemon is not activated."
+	return 1
+    fi
+}
+
+start || stop

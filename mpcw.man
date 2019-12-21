@@ -8,8 +8,10 @@ mpcw [COMMAND]
 
 command
 
+mpcwd
+
 .SH DESCRIPTION
-mpcw is a wrapper for Music Player Daemon's client, mpc.
+mpcw is a wrapper+ for Music Player Daemon's client, mpc.
 .br
 It enables notification on song change, "music non-stop" and playback statistics.
 .br
@@ -29,7 +31,7 @@ Commands can be invoked directly from the command line.
 .br
 Also, it's possible to call mpcw functions (ie. as keyboard shortcuts in a tiling window manager), by entering:
 .br
-mpcw [COMMAND]
+mpcw [COMMAND] [ARGS]
 .br
 .br 
 .TP

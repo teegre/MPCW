@@ -3,12 +3,12 @@
 mediatitle() {
     op=~/.config/currentmedia
     sts="$(awk '$1~"status"{print $2}' "$op")"
-    art=$(echo $(awk '$1~"artist"{for (i=2; i<=NF; i++) print $i}' "$op"))
-    ttl=$(echo $(awk '$1~"title"{for (i=2; i<=NF; i++) print $i}' "$op"))
+    art="$(awk '$1~"artist"{for (i=2; i<=NF; i++) printf " " $i}' "$op")"
+    ttl="$(awk '$1~"title"{for (i=2; i<=NF; i++) printf " " $i}' "$op")"
     
     case "$sts" in
-      "[playing]") [[ -n $art ]] && echo " [>> $art: $ttl" || echo " [>> $ttl";;
-      "[paused]") [[ -n $art ]] && echo " [|| $art: $ttl" || echo " [|| $ttl";;
+      "[playing]") [[ -n $art ]] && echo " [>>$art:$ttl" || echo " [>>$ttl";;
+      "[paused]") [[ -n $art ]] && echo " [||$art:$ttl" || echo " [||$ttl";;
       *) echo " [|]"
     esac
 }
