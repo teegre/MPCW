@@ -74,7 +74,7 @@ logme() {
 }
 
 reads() {
-    # read config file.
+    # read settings file.
     # create it with default values if it doesn't exist.
     if ! [[ -a "$MPCW_SETTINGS" ]]; then
 	local settings
@@ -219,6 +219,7 @@ play() {
     else
 	mpc -q random off
 	mpc -q crossfade 0
+	writes voice off
         mpc -q --wait play "$@"
 	sleep 0.1
 	mpc -q volume "$volume"
