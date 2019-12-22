@@ -52,17 +52,32 @@ __watch() {
     logme "DAEMON: started."
 
     while :; do
+
 	if ! [[ -a "$MPCW_PID" ]]; then
 	    logme "DAEMON: stopped."
 	    return 0
 	fi
         if [[ "$(pstatus)" == "[playing]" ]]; then
+	    
 	    song="$(getinfo file)"
-	    duration="$(printf 'status\n;exit\n' | nc localhost 6600 | awk '$1~"duration" {print $2}')"
+
+	    local host
+	    local port
+
+	    if [[ "$MPD_HOST" && "$MPD_PORT" ]]; then
+		host="$MPD_HOST"
+		port="$MPD_PORT"
+	    else
+		host="localhost"
+		port=6600
+	    fi	
+
+	    duration="$(printf 'status\n;exit\n' | nc "$host" "$port" | awk '$1~"duration" {print $2}')"
 	    duration=${duration//.*}
 	    ((duration-=1))
-	    elapsed="$(printf 'status\n;exit\n' | nc localhost 6600 | awk '$1~"elapsed" {print $2}')"
+	    elapsed="$(printf 'status\n;exit\n' | nc "$host" "$port" | awk '$1~"elapsed" {print $2}')"
 	    elapsed=${elapsed//.*}
+
 	    if [[ "$elapsed" == "$duration" && -n "$song" ]]; then
 		update_stats "$song"
 		echo "$(now) --- $song" >> "$MPCW_HIST"

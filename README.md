@@ -46,6 +46,7 @@ To start or stop the **MPCW** daemon:
 |mpcw.settings |Settings file.
 |mpcw.log |Log file.
 |mpcw.hist |Played songs history.
+|mpcw.hist.backup|History backup file.
 |mpcw.pid | Daemon process id.
 |mpcw.wpid | Daemon process id.
 
@@ -118,6 +119,7 @@ These icons are visible in the notifications.
 |getrnd [count] [song/album]|rnd|Return [count] song(s) or album(s).
 |see_album  |seeal              |Display album.
 |see_artist |seear              |Display artist's albums.
+|-          |np                 |Display current song info.
 
 
 

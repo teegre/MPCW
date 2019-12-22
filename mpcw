@@ -22,6 +22,7 @@ alias sta="mpc -q single" # stop after current
 alias rn="mpc -q random; status random"
 alias rp="mpc -q repeat; status repeat"
 alias cs="mpc -q consume; status consume"
+alias np="status;status progress"
 alias rnd="getrnd"
 alias nx="mpc -q next"
 alias pv="mpc -q prev"
@@ -151,9 +152,9 @@ __clean() {
     local date
     date=$(date -d "now -$freq" "+%Y-%m-%d")
     cp "$MPCW_HIST" "$MPCW_HIST.backup"
-    awk $'$1 > '"$date"'' "$MPCW_HIST" > "$MPCW_HIST.tmp"
-    if [[ -n $(diff "$MPCW_HIST.tmp" "$MPCW_HIST.backup") ]]; then
-	 logme "cleaned history entries older than $date."
+    awk '$1 > "'"$date"'"' "$MPCW_HIST" > "$MPCW_HIST.tmp"
+    if [[ -n $(diff "$MPCW_HIST" "$MPCW_HIST.tmp") ]]; then
+	 logme "cleaned history until $date."
 	 rm "$MPCW_HIST"
 	 mv "$MPCW_HIST.tmp" "$MPCW_HIST"
     else
