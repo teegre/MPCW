@@ -18,7 +18,8 @@ alias ins="mpc insert"
 alias del="mpc -q del"
 alias clr="mpc -q clear"
 alias cr="mpc -q crop"
-alias sta="mpc -q single" # stop after current
+alias sta="stop_after_current" # stop after current
+alias si="mpc -q single"
 alias rn="mpc -q random; status random"
 alias rp="mpc -q repeat; status repeat"
 alias cs="mpc -q consume; status consume"
@@ -29,7 +30,7 @@ alias pv="mpc -q prev"
 alias mns="musicnonstop"
 alias mnsa="musicnonstop album"
 alias mnss="musicnonstop song"
-alias mnsi="musinonstop sima"
+alias mnsi="musicnonstop sima"
 alias mnso="musicnonstop off"
 alias move="mpc -q move"
 alias xf="mpc crossfade"
@@ -43,7 +44,7 @@ alias pl="play"
 alias pla="play_album"
 alias aa="add_album"
 alias nxa="next_album"
-alias s="mpc -q stop"
+alias s="stop"
 alias sk="skip"
 alias usk="unskip"
 alias skl="set_skip_limit"
@@ -83,7 +84,8 @@ nonstop off
 filter off
 clean 1 month
 skip 2
-voice off"
+voice off
+single off"
 	mkdir "$HOME/.config/mpcw" 2>/dev/null
         echo "$settings" > "$MPCW_SETTINGS"
     fi
@@ -100,7 +102,6 @@ writes() {
         shift
         local val="$*"
 	sed -i "s/^$opt\s[a-zA-Z0-9].*/$opt $val/" "$MPCW_SETTINGS"
-	return 0
     } || return 1
 }
 
@@ -192,13 +193,14 @@ toggle() {
     if [[ "$(pstatus)" == "[stopped]" ]]; then
 	play "$@"
     else
-	mpc -q toggle
+	pause
     fi
 }
 
 pause() {
     if [[ "$(pstatus)" == "[playing]" ]]; then
 	mpc -q pause
+	logme "[PAUSED]"
     else
         play
     fi
@@ -210,16 +212,22 @@ play() {
     local nonstop
     volume="$(reads volume)"
     nonstop="$(reads nonstop)"
+    logme "[PLAYING] mode::$nonstop; volume::$volume; items::$(mpc playlist | wc -l)"
     if [[ "$(pstatus)" == "[stopped]" ]] && [[ $nonstop != "off" ]]; then
         if ! handle_playlist; then
             mpc -q --wait play "$@"
 	    sleep 0.1
 	    mpc -q volume "$volume"
 	fi
-    else
+    elif [[ $nonstop == "off" ]]; then
 	mpc -q random off
 	mpc -q crossfade 0
+	mpc -q replaygain auto
 	writes voice off
+        mpc -q --wait play "$@"
+	sleep 0.1
+	mpc -q volume "$volume"
+    else
         mpc -q --wait play "$@"
 	sleep 0.1
 	mpc -q volume "$volume"
@@ -410,7 +418,15 @@ set_skip_limit() {
 }
 
 stop() {
+    echo > "$MPCW_LOCK"
     mpc -q stop
+    logme "[STOPPED]"
+    rm "$MPCW_LOCK"
+}
+
+stop_after_current() {
+    mpc -q single
+    writes single "$(status single)"
 }
 
 vol() {
@@ -667,6 +683,8 @@ handle_playlist() {
     local mode
     mode="$(reads nonstop)"
     if [[ "$mode" != "off" ]] && [[ -z "$(getnext file)" || -z "$(pls)" ]]; then
+	[[ "$(mpc playlist | wc -l)" -gt 1 ]] && return 1
+	logme "[H] mode::$mode; items::$(mpc playlist | wc -l)"
         case "$mode" in
             "album")
 		local filter
@@ -682,6 +700,7 @@ handle_playlist() {
 		mpc -q consume on
 		mpc -q random off
 		writes voice off
+		logme "[H] added new album."
 		;;
 	    "song")
 		local filter
@@ -698,6 +717,7 @@ handle_playlist() {
 		mpc -q consume on
 		mpc -q random on
 		writes voice on
+		logme "[H] added new songs."
 		;;
 	    "sima")
 		# SIMilar Artist mode:
@@ -713,14 +733,14 @@ handle_playlist() {
 		    sleep 0.1
 		    mpc -q volume "$(reads volume)"
 		    notify-send -u normal $'MPCW:\n'"$(getinfo artist)"' radio.'
-		    logme "SIMA: added [$(getinfo artist): $(getinfo title)]"
+		    logme "[H/SIMA]: added [$(getinfo artist): $(getinfo title)]"
 		    sleep 2
 		    getsima "$(getinfo artist)" | mpc -q add 2>/dev/null
 		}
 		if [[ -z "$(getnext file)" ]]; then
-		    logme "SIMA: there's no next song"
+		    logme "[H/SIMA]: there's no next song"
 		    if [[ -a "$MPCW_LOCK" ]]; then
-			logme "SIMA: there's a lock!"
+			logme "[H/SIMA]: there's a lock!"
 			mpc -q --wait play
 			sleep 0.1
 			mpc -q volume "$(reads volume)"
@@ -729,12 +749,12 @@ handle_playlist() {
 			notify-send -u normal $'MPCW:\n'"$(getinfo artist)"' radio.'
 		    else
 			getrnd 1 song | mpc -q add 2>/dev/null
-			logme "SIMA: added [$(getnext artist): $(getnext title)]"
+			logme "[H/SIMA]: added [$(getnext artist): $(getnext title)]"
 			getsima "$(getnext artist)" | mpc -q add 2>/dev/null
 			notify-send -u normal $'MPCW: Coming next:\n'"$(getnext artist)"' radio.'
 		    fi
 		else
-		    logme "SIMA: there is a next song, nothing to do."
+		    logme "[H/SIMA]: there is a next song, nothing to do."
 		fi
 		mpc replaygain track;
 		mpc -q crossfade 10

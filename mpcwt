@@ -7,15 +7,15 @@ mediatitle() {
     ttl="$(awk '$1~"title"{for (i=2; i<=NF; i++) printf " " $i}' "$op")"
     
     case "$sts" in
-      "[playing]") [[ -n $art ]] && echo " [>>$art:$ttl" || echo " [>>$ttl";;
-      "[paused]") [[ -n $art ]] && echo " [||$art:$ttl" || echo " [||$ttl";;
+      "[playing]") [[ -n $art ]] && echo "[>>$art:$ttl" || echo "[>>$ttl";;
+      "[paused]") [[ -n $art ]] && echo "[||$art:$ttl" || echo "[||$ttl";;
       *) echo " [|]"
     esac
 }
 
 scroll() {
-    killall zscroll 2>/dev/null
-    zscroll -b "|" -p " **" -l 50 -d 0.4 "$(mediatitle)" &
+    killall scroller 2>/dev/null
+    scroller -b "|" -t "$(mediatitle)" -e "|"
 }
 
 scroll

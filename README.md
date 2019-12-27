@@ -5,7 +5,7 @@ It enables notification on song change, *music non-stop* and playback statistics
 It also provides many aliases/commands to easily control the music player from a terminal.<br>
 
 *Dependencies: mpd, mpc, dunst (or similar), wget, jq*<br>
-*Optional dependencies: espeak and mpv (for voice over), zscroll*
+*Optional dependencies: espeak and mpv (for voice over)*
 
 
 
@@ -236,6 +236,7 @@ Example: set clean frequency to 2 weeks.
 |- |cs |Toggle consume mode.
 |- |rn |Toggle random mode.
 |- |rp |Toggle repeat mode.
+|- |si |Toggle single mode.
 |- |xf [duration] |Crossfade.
 |- |xfo |Turn crossfade off.
 |- |rpg |Display replaygain status.
@@ -292,9 +293,7 @@ This is how to set up mpcwt in polybar:
     tail = true
     interval = 0
 
-*Note: zscroll is needed to use this script.*
-
-> | [>> KTL: Last Spring: A Prequel`
+> | [>> KTL: Last Spring: A Prequel
 
 
 

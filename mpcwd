@@ -20,8 +20,9 @@ main() {
 
 	media_update
 
-	if [[ "$(status single)" == "on" ]]; then
+	if [[ "$(reads single)" == "on" ]]; then
 	    mpc -q single off
+	    writes single off
 	elif ! [[ -a "$MPCW_LOCK" ]]; then
 	    handle_playlist
 	fi
@@ -39,6 +40,9 @@ main() {
 	    [[ $n == 5 ]] && sleep 5 && __say
 	elif [[ "$nonstop" == "off" ]]; then
 	    notify-send -u low "$icon"
+	    [[ "$(mpc playlist | wc -l)" -eq 0 ]] && logme "[END]"
+	else
+	    [[ "$(mpc playlist | wc -l)" -eq 0 ]] && logme "[END]"
 	fi
 
     done < <(mpc idleloop player 2>/dev/null)

@@ -1,0 +1,117 @@
+#! /usr/bin/env bash
+
+usage() {
+    echo "Usage: $0 [-h] [-l <length>] [-d <delay>] [-b <text>] [-e <text>] [-s <separator>] [text]"
+    echo
+    echo
+    echo "Options:"
+    echo "-h	display this help and exits."
+    echo "-l	maximum text length (default is 45 characters)."
+    echo "-d	scrolling frequency in seconds (default is 0.3)."
+    echo "-b	fixed text at the beginning."
+    echo "-e	fixed text at the end."
+    echo "-s	separator between start and end of scrolling text (default: ' -- ')."
+    echo "-t	text to scroll. no scrolling occurs if its length is smaller or equal to -l argument."
+}
+
+exit_abnormal() {
+    usage
+    exit 1
+}
+
+
+while getopts "l:d:b:e:s:t:h" opt; do
+    case "$opt" in
+	l)
+	    MAXLEN=$OPTARG
+	    if ! [[ "$MAXLEN" =~ ^[0-9]+$ ]]; then
+	       echo "$0: length must be an integer."
+	       exit 1
+	    elif [[ "$MAXLEN" -le 0 ]]; then
+		echo "$0: length must be greater than 0."
+		exit 1
+	    fi
+	    ;;
+	d)
+	    DELAY=$OPTARG
+	    if ! [[ "$DELAY" =~ ^[0-9]+\.[0-9]+$|^[0-9]+$ ]]; then
+		echo "$0: delay must be a number."
+		exit 1
+	    elif [[ "$DELAY" == "0" ]]; then
+		echo "$0: delay must be greater than 0."
+		exit 1
+	    fi
+	    ;;
+	b)
+	    BEGIN_TEXT=$OPTARG
+	    ;;
+	e)
+	    END_TEXT=$OPTARG
+	    ;;
+	s)
+	    SEPARATOR=$OPTARG
+	    ;;
+	t)
+	    TEXT=$OPTARG
+	    ;;
+	h)
+	    usage
+	    exit 0
+	    ;;
+	:)
+	    echo "$0: -$OPTARG requires an argument."
+	    exit_abnormal
+	    ;;
+	*)
+	    echo "$0: unknown option -$OPTARG"
+	    exit_abnormal
+    esac
+done
+
+if [[ -z "$TEXT" ]]; then
+    echo "$0: no text to display!"
+    exit 1
+fi
+
+BEGIN_TEXT=${BEGIN_TEXT:-}
+END_TEXT=${END_TEXT:-}
+SEPARATOR=${SEPARATOR:-" -- "}
+MAXLEN=${MAXLEN:-45}
+DELAY="${DELAY:-0.3}"
+substring="$TEXT"
+endstring="$SEPARATOR$TEXT"
+((LEN=${#TEXT}))
+INDEX=0
+START=0
+END=0
+
+
+while :; do
+    if [[ "$LEN" -ge "$MAXLEN" ]]; then
+	if [[ "$INDEX" -ge "((LEN-MAXLEN))" ]]; then
+	    substring="${TEXT:$INDEX:$MAXLEN}${endstring:$START:$END}"
+	    if [[ "$INDEX" -lt "$LEN" ]]; then
+		((INDEX++))
+	    else
+		((START++))
+		((END=MAXLEN-1))
+	    fi
+	    ((END++))
+	    [[ "$substring" == "${TEXT:0:$MAXLEN}" ]] && {
+		INDEX=0
+		continue
+	    }
+	else
+	    substring="${TEXT:$INDEX:$MAXLEN}"
+	    ((INDEX++))
+	    START=0
+	    END=0
+	fi
+    fi
+    if [[ "$LEN" -le "$MAXLEN" ]]; then
+	echo "$BEGIN_TEXT $substring"
+    else
+	echo "$BEGIN_TEXT $substring $END_TEXT"
+    fi
+    sleep "$DELAY"
+done
