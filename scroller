@@ -110,8 +110,9 @@ while :; do
     fi
     if [[ "$LEN" -le "$MAXLEN" ]]; then
 	echo "$BEGIN_TEXT $substring"
+	exit 0
     else
 	echo "$BEGIN_TEXT $substring $END_TEXT"
+	sleep "$DELAY"
     fi
-    sleep "$DELAY"
 done

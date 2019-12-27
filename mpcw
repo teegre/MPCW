@@ -111,7 +111,7 @@ media_update() {
             mpc current -f "$MPCW_FMT"
         } > "$HOME/.config/currentmedia"
 
-        kill -1 "$(pidof -x "mpcwt")" 2>/dev/null
+        killall -s HUP "mpcwt" 2>/dev/null
 }
 
 __say() {

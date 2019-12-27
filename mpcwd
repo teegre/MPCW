@@ -145,7 +145,7 @@ stop() {
 	kill "$pid" 2>/dev/null
 	sleep 1
 	echo  > "$HOME/.config/currentmedia"
-	kill -1 "$(pidof -x "mpcwt")" 2>/dev/null
+	killall -s HUP "mpcwt" 2>/dev/null
 	echo "[|] mpcw daemon stopped."
 	return 0
     else

@@ -1,5 +1,7 @@
 #! /usr/bin/bash
 
+declare PID
+
 mediatitle() {
     op=~/.config/currentmedia
     sts="$(awk '$1~"status"{print $2}' "$op")"
@@ -14,8 +16,12 @@ mediatitle() {
 }
 
 scroll() {
-    killall scroller 2>/dev/null
-    scroller -b "|" -t "$(mediatitle)" -e "|"
+    [[ -n $PID ]] && {
+	kill "$PID" 2>/dev/null
+        PID=""
+    }
+    scroller -b "|" -t "$(mediatitle)" -e "|" &
+    PID=$!
 }
 
 scroll
