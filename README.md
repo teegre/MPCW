@@ -50,6 +50,8 @@ To start or stop the **MPCW** daemon:
 |mpcw.pid | Daemon process id.
 |mpcw.wpid | Daemon process id.
 
+*currentmedia* file is stored in *$HOME/.config* and is updated by *mpcwd*.
+It is used by *mpcwt* to display current song.
 
 
 ## 3. Usage

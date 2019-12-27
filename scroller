@@ -87,7 +87,7 @@ END=0
 
 
 while :; do
-    if [[ "$LEN" -ge "$MAXLEN" ]]; then
+    if [[ "$LEN" -gt "$MAXLEN" ]]; then
 	if [[ "$INDEX" -ge "((LEN-MAXLEN))" ]]; then
 	    substring="${TEXT:$INDEX:$MAXLEN}${endstring:$START:$END}"
 	    if [[ "$INDEX" -lt "$LEN" ]]; then
