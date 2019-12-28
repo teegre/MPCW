@@ -25,6 +25,7 @@ scroll() {
 }
 
 scroll
-trap scroll SIGHUP 
+trap '{ kill $PID 2>/dev/null; }' EXIT
+trap scroll SIGHUP
 
 while true; do read -r; done

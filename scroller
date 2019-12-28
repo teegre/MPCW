@@ -85,6 +85,7 @@ INDEX=0
 START=0
 END=0
 
+[[ "$TERM" != "linux" ]] && clear
 
 while :; do
     if [[ "$LEN" -gt "$MAXLEN" ]]; then
@@ -109,9 +110,11 @@ while :; do
 	fi
     fi
     if [[ "$LEN" -le "$MAXLEN" ]]; then
+	[[ "$TERM" != "linux" ]] && tput cup 0 0
 	echo "$BEGIN_TEXT $substring"
 	exit 0
     else
+	[[ "$TERM" != "linux" ]] && tput cup 0 0
 	echo "$BEGIN_TEXT $substring $END_TEXT"
 	sleep "$DELAY"
     fi
