@@ -1,10 +1,10 @@
 # **MPCW** (12-2019)
 
-**MPCW** is a wrapper+ for Music Player Daemon's client, mpc.<br>
-It enables notification on song change, *music non-stop* and playback statistics.<br>
-It also provides many aliases/commands to easily control the music player from a terminal.<br>
+**MPCW** is a wrapper+ for Music Player Daemon's client, mpc.  
+It enables notification on song change, *music non-stop* and playback statistics.  
+It also provides many aliases/commands to easily control the music player from a terminal.  
 
-*Dependencies: mpd, mpc, dunst (or similar), wget, jq*<br>
+*Dependencies: mpd, mpc, dunst (or similar), wget, jq*  
 *Optional dependencies: espeak and mpv (for voice over)*
 
 
@@ -56,7 +56,7 @@ It is used by *mpcwt* to display current song.
 
 ## 3. Usage
 
-Commands can be invoked directly from the command line.<br>
+Commands can be invoked directly from the command line.  
 Also, it is possible to call **MPCW** functions (ie. as keyboard shortcuts to be used in a tiling window manager), by entering:
 
 `mpcw [command]`
@@ -85,21 +85,21 @@ Also, it is possible to call **MPCW** functions (ie. as keyboard shortcuts to be
 
 #### 3.1.1 About play_album and add_album commands
 
-Let's say you are listening to random songs. Then you hear one that you really like and you think you would like to listen to the full album.<br>
-So type: `pla` and the album starts to play. If the song you are listening to is the first track of the album, playback continues seamlessly.<br>
-Otherwise, playback stops and the first song of the album plays.<br>
+Let's say you are listening to random songs. Then you hear one that you really like and you think you would like to listen to the full album.  
+So type: `pla` and the album starts to play. If the song you are listening to is the first track of the album, playback continues seamlessly.  
+Otherwise, playback stops and the first song of the album plays.  
 But what if you want to listen to the entire song and play the album afterwards? Then type: `aa`, and you're done.
 
 #### 3.1.2 Icons
 
 |Icon |Meaning
 |:----|:------
-|[>> |Playing.
+|[>>  |Playing.
 |`[||`|Paused.
 |`[|]`|Stopped.
-|(=)|Album mode.
-|(-)|Song mode.
-|(s)|SIMA mode.
+|(=)  |Album mode.
+|(-)  |Song mode.
+|(s)  |SIMA mode.
 
 These icons are visible in the notifications.
 
@@ -130,7 +130,9 @@ These icons are visible in the notifications.
 There are two commands for controlling volume:
 
 - **vol** [-n] [(+/-)value]: set volume. If n option is provided, display a notification. If no argument is given, display actual volume.
-- **dim** [-n]: decrease volume by 50% or set volume back to its previous value.<br>If n option is provided, display a notification.<br>*Volume can be dimmed only when a song is playing. It is disabled after playback is stopped*.
+- **dim** [-n]: decrease volume by 50% or set volume back to its previous value.  
+- If n option is provided, display a notification.  
+- *Volume can be dimmed only when a song is playing. It is disabled after playback is stopped*.
 
 
 
@@ -173,10 +175,10 @@ It's also possible to play songs/album by artist, genre, date, etc.
 |:-------|:-----|:----------
 | musicnonstop sima |mnsi |Enable SIMilar Artists mode.
 
-SIMA mode automatically creates artist based playlists.<br>
-You can choose what artist to start with by adding one song to an empty playlist.<br>
-If playlist is empty, **MPCW** picks a random song and adds similar artists.<br>
-When the last song is played, a random song is added and similar artists for this song are added as well.<br>
+SIMA mode automatically creates artist based playlists.  
+You can choose what artist to start with by adding one song to an empty playlist.  
+If playlist is empty, **MPCW** picks a random song and adds similar artists.  
+When the last song is played, a random song is added and similar artists for this song are added as well.  
 
 *Note: an internet connection is required to use this mode.*
 
@@ -184,9 +186,9 @@ When the last song is played, a random song is added and similar artists for thi
 
 #### 3.4.3 Jingles *(optional)* / Voice over
 
-To make *song mode* more lively and sound like an actual radio, I've created a bunch of jingles.<br>
-They must be added to your library in order to be used → *directory: mnsr/jingles*<br>
-One jingle is added to the playlist every 10 tracks.<br>
+To make *song mode* more lively and sound like an actual radio, I've created a bunch of jingles.  
+They must be added to your library in order to be used → *directory: mnsr/jingles*  
+One jingle is added to the playlist every 10 tracks.  
 
 There's also a voice over feature (using espeak and mpv) that randomly occurs when a song starts playing (song and SIMA modes only).
 
@@ -222,8 +224,8 @@ To change it:
 |set_skip_limit [count] | skl
 
 
-Also, songs that are listed in the history won't be added to the playlist in song or SIMA mode.<br>
-You can set a time limit for song to remain in history. By default it's set to 1 month.<br>
+Also, songs that are listed in the history won't be added to the playlist in song or SIMA mode.  
+You can set a time limit for song to remain in history. By default it's set to 1 month.  
 To do so:
 
 `clean_freq [num (day(s)|week(s)|month(s)|year(s))]`
@@ -260,8 +262,8 @@ Example: set clean frequency to 2 weeks.
 Examples:
 
     ~ search kraftwerk metal on metal
-    kraftwerk/3-D The Catalogue/03-01 Trans-Europe Express _ Metal On Metal _ Abzug 3-D.flac
-    kraftwerk/3-D The Catalogue/07-06 Trans-Europe Express _ Metal On Metal _ Abzug Headphone Surround 3-D Mix.flac
+    kraftwerk/3-D The Catalogue/03-01 Trans-Europe Express_Metal On Metal_Abzug 3-D.flac
+    kraftwerk/3-D The Catalogue/07-06 Trans-Europe Express_Metal On Metal_ Abzug Headphone Surround 3-D Mix.flac
     kraftwerk/Minimum-Maximum/2-03 Metal On Metal.mp3
     kraftwerk/The Mix/09 Metal On Metal.mp3
     kraftwerk/trans_europe_express/5_metal_on_metal.flac
@@ -272,10 +274,10 @@ Examples:
     kraftwerk/3-D The Catalogue/07-02 Computer Love Headphone Surround 3-D Mix.flac
     kraftwerk/3-D The Catalogue/07-03 Pocket Calculator _ Dentaku Headphone Surround 3-D Mix.flac
     kraftwerk/3-D The Catalogue/07-04 Autobahn Headphone Surround 3-D Mix.flac
-    kraftwerk/3-D The Catalogue/07-05 Geiger Counter _ Radioactivity Headphone Surround 3-D Mix.flac
-    kraftwerk/3-D The Catalogue/07-06 Trans-Europe Express _ Metal On Metal _ Abzug Headphone Surround 3-D Mix.flac
-    kraftwerk/3-D The Catalogue/07-07 It's More Fun To Compute _ Home Computer Headphone Surround 3-D Mix.flac
-    kraftwerk/3-D The Catalogue/07-08 Boing Boom Tschak _ Techno Pop _ Music Non Stop  Headphone Surround 3-D Mix.flac
+    kraftwerk/3-D The Catalogue/07-05 Geiger Counter_Radioactivity Headphone Surround 3-D Mix.flac
+    kraftwerk/3-D The Catalogue/07-06 Trans-Europe Express_Metal On Metal_Abzug Headphone Surround 3-D Mix.flac
+    kraftwerk/3-D The Catalogue/07-07 It's More Fun To Compute_Home Computer Headphone Surround 3-D Mix.flac
+    kraftwerk/3-D The Catalogue/07-08 Boing Boom Tschak_Techno Pop_Music Non Stop  Headphone Surround 3-D Mix.flac
     kraftwerk/3-D The Catalogue/07-09 Planet Of Visions Headphone Surround 3-D Mix.flac
     ~
 
@@ -303,3 +305,7 @@ This is how to set up mpcwt in polybar:
 
 `./uninstall.sh`
 
+## 6. TODO
+
+- Take rating/playcount in consideration when generating *music non-stop* playlists. 
+- Enable scroller customisation via mpcwt options.

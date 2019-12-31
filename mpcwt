@@ -3,7 +3,7 @@
 declare PID
 
 mediatitle() {
-    op=~/.config/currentmedia
+    op="$HOME/.config/currentmedia"
     sts="$(awk '$1~"status"{print $2}' "$op")"
     art="$(awk '$1~"artist"{for (i=2; i<=NF; i++) printf " " $i}' "$op")"
     ttl="$(awk '$1~"title"{for (i=2; i<=NF; i++) printf " " $i}' "$op")"

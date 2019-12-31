@@ -23,7 +23,7 @@ alias si="mpc -q single"
 alias rn="mpc -q random; status random"
 alias rp="mpc -q repeat; status repeat"
 alias cs="mpc -q consume; status consume"
-alias np="status;status progress"
+alias np="status;status progress; rating s; playcount; lastplayed; skipcount"
 alias rnd="getrnd"
 alias nx="mpc -q next"
 alias pv="mpc -q prev"
@@ -90,7 +90,10 @@ single off"
         echo "$settings" > "$MPCW_SETTINGS"
     fi
     local result
-    result="$(sed -n "s/$1 //p" "$MPCW_SETTINGS")"
+    [[ -z "$1" ]] && {
+	echo "$0: options:"
+	result="$(awk '{print "| " $1}' "$MPCW_SETTINGS")"
+    } || result="$(sed -n "s/$1 //p" "$MPCW_SETTINGS")"
     [[ -z "$result" ]] && return 1
     echo "$result"
 }
@@ -101,7 +104,7 @@ writes() {
 	local opt="$1"
         shift
         local val="$*"
-	sed -i "s/^$opt\s[a-zA-Z0-9].*/$opt $val/" "$MPCW_SETTINGS"
+	sed -i "s/^$opt\s.*/$opt $val/" "$MPCW_SETTINGS"
     } || return 1
 }
 
@@ -119,7 +122,8 @@ __say() {
     [[ $(reads voice) == "off" ]] && return
     [[ $(pstatus) != "[playing]" ]] && return
     [[ $(getinfo album) == "MNSR Jingles" ]] && return
-    local TMPWAV=$HOME/.config/mpcw/saytmp.wav
+    local TMPWAV
+    TMPWAV="$(mktemp)"
     local radio
     case "$(reads nonstop)" in
 	"song") radio="MUSIC NON STOP RADIO";;
@@ -183,7 +187,7 @@ clean_freq() {
 	error=1
     fi
     if [[ "$error" == 1 ]]; then
-	echo "usage: clean_freq <num [day(s)|week(s)|month(s)|year(s)>"
+	echo "usage: $0 <num> < day(s) | week(s) | month(s) | year(s) >"
     else
 	writes clean "$arg1" "$arg2"
     fi
@@ -308,13 +312,13 @@ next_album() {
 }
 
 __is_in_history() {
-    grep -q "$1" "$MPCW_HIST" 2>/dev/null
+    grep -Fq "$1" "$MPCW_HIST" 2>/dev/null
     echo $?
 }
 
 __is_in_playlist() {
     mpc playlist -f "%file%" > "current"
-    grep -q "$1" "current" 2>/dev/null
+    grep -Fq "$1" "current" 2>/dev/null
     echo $?
     rm "current" 2>/dev/null
 }
@@ -342,8 +346,8 @@ search_tag() {
     fi
     [[ "$error" -eq 1 ]] &&
     (
-	echo "MPCW: <$*> did not return any result!"
-	echo "usage: search_tag <tag value ... tag value>"
+	echo "MPCW: [$*] did not return any result!"
+	echo "usage: $0 <tag> <value> ... <tag> <value>"
 	return 1
     )
 }
@@ -360,8 +364,8 @@ find_tag() {
 	error=1
     fi
     [[ "$error" -eq 1 ]] && {
-	echo "MPCW: <$*> did not return any result!"
-	echo "usage: search_tag <tag value ... tag value>"
+	echo "MPCW: [$*] did not return any result!"
+	echo "usage: $0 <tag> <value> ... <tag> <value>"
 	return 1
     }
 }
@@ -473,7 +477,7 @@ dim() {
 	    notify-send -u normal -t 1000 "MPCW: dim off"
 	else
 	    echo "MPCW: dim off."
-	    echo "usage: dim [-n]"
+	    echo "usage: $0 [-n]"
 	fi
     elif [[ $current_volume -eq $saved_volume ]]; then
 	((current_volume/=2))
@@ -484,7 +488,7 @@ dim() {
 	    notify-send -u normal -t 1000 "MPCW: dim on"
 	else
 	    echo "MPCW: dim on."
-	    echo "usage: dim [-n]"
+	    echo "usage: $0 [-n]"
 	fi
    fi
 }
@@ -506,60 +510,93 @@ getnext() {
     [[ $command == "%"* ]] || echo "$command"
 }
 
+__get_one_song() {
+    local song
+    local skc
+    local skl
+    skl="$(reads skip)"
+    local match=0
+    while [[ "$match" == 0 ]]; do
+	if [[ -z "$*" ]]; then
+	    song="$(mpc listall | shuf -n 1)"
+	else
+	    song="$(search_tag "$@" | shuf -n 1)"
+	    if [[ -z "$song" ]]; then
+		echo "MPCW: no song was found. [$*]" >&2
+		return 1
+	    fi
+	fi
+	(($(mpc sticker "$song" get "skipcount" 2>/dev/null)))
+	skc=${skipcount:-0}
+	[[ $skc -ge $skl ]] && continue
+	[[ $(__is_in_history "$song") == 0 ||
+	    $(__is_in_playlist "$song") == 0 ]] || match=1
+    done
+    echo "$song"
+}
+
+__get_one_album() {
+    local album
+    local match=0
+    while [ "$match" -eq 0 ]; do
+	if [[ -z "$*" ]]; then
+	    album="$(mpc listall | shuf -n 1)"
+	    album="${album%/*}"
+	    [[ $(__is_in_history "$album") == 1 ]] && match=1
+	else
+	    album="$(search_tag "$@" | shuf -n 1)"
+	    if [[ -z "$album" ]]; then
+		echo "MPCW: no album were found. [$*]"
+		return 1
+	    fi
+	    album="${album%/*}"
+	    [[ $(__is_in_history "$album") == 1 ]] && match=1
+	fi
+    done
+    echo "$album"
+}
+
 getrnd() {
     # get random songs / albums
     if [[ $1 =~ ^[0-9]+$ ]]; then
         local count
 	count=$1
 	shift
+	local i=0
         case "$1" in
-            "album")
+            album)
+		local album
                 if [[ "$2" == "off" ]] || [[ -z "$2" ]]; then
-                    mpc listall 2>/dev/null | shuf -n "$count" | sed 's/\/[0-9]+*.*//'
-		else
-		    shift
-		    search_tag "$@" | shuf -n "$count" | sed 's/\/[0-9]+*.*//'
-		fi
-	        ;;
-	    "song")
-		if [[ "$2" == "off" ]] || [[ -z "$2" ]]; then
-		    i=0
 		    while [ $i -lt "$count" ]; do
-			while read -r line; do
-			    (($(mpc sticker "$line" get "skipcount" 2>/dev/null)))
-			    skc=${skipcount:-0}
-			    skl=$(reads "skip")
-			    [[ $skc -ge $skl ]] && continue
-			    [[ $(__is_in_history "$line") == 0 ||
-				$(__is_in_playlist "$line") == 0 ]] ||
-			    { 
-				echo "$line"
-				((i++))
-			    }
-			done <<< "$(mpc listall | shuf -n 1)"
+			__get_one_album
+			((i++))
 		    done
 		else
 		    shift
-		    i=0
 		    while [ $i -lt "$count" ]; do
-			while read -r line; do
-			    (($(mpc sticker "$line" get "skipcount" 2>/dev/null)))
-			    skc=${skipcount:-0}
-			    skl=$(reads "skip")
-			    [[ $skc -ge $skl ]] && continue
-			    [[ $(__is_in_history "$line") == 0 ||
-				$(__is_in_playlist "$line") == 0 ]] ||
-			    {
-				echo "$line"
-				((i++))
-			    }
-			done <<< "$(search_tag "$@" | shuf -n 1)"
+			__get_one_album "$@" || return 1
+			((i++))
+		    done
+		fi
+	        ;;
+	    song)
+		if [[ "$2" == "off" ]] || [[ -z "$2" ]]; then
+		    while [ $i -lt "$count" ]; do
+			__get_one_song
+			((i++))
+		    done
+		else
+		    shift
+		    while [ $i -lt "$count" ]; do
+			__get_one_song "$@" || return 1
+			((i++))
 		    done
 		fi
 		;;
+	    *) echo "MPCW: invalid argument. [$1]" >&2
       esac
     else
-	echo "usage: getrnd <number> [song|album] <tag> <value>"
+	echo "usage: $0 <number> < song | album > [ <tag> <value> ... <tag> <value> ]"
 
     fi
 }
@@ -637,8 +674,8 @@ musicnonstop() {
 	song) writes nonstop song;;
 	sima) writes nonstop sima;;
 	off) writes nonstop off;;
-	help) echo "usage: musicnonstop [album|song|sima] <tag value...tag value>"; return ;;
-	*) echo "music non-stop: $(reads nonstop) | filter: $(reads filter)"; return
+	help) echo "usage: $0 < album | song | sima > [ <tag> <value> ... <tag> <value> ]"; return 1;;
+	*) echo "$0: $(reads nonstop) | filter: $(reads filter)"; return 1
     esac
     shift
     if [ "$*" ]; then
@@ -652,16 +689,16 @@ musicnonstop() {
     else
 	writes filter off
     fi
-    echo "music non-stop: $(reads nonstop) | filter: $(reads filter)"
+    echo "$0: $(reads nonstop) | filter: $(reads filter)"
 }
 
 pls() {
     local pos
     local fmt
-    local PLAYLIST
     local cols
     cols=$(tput cols)
-    local PLAYLIST=$HOME/.config/mpcw/playlist
+    local PLAYLIST
+    PLAYLIST="$(mktemp)"
     pos="$(mpc current -f "%position%")"
     fmt="%artist% \ %title% \ %album%"
     mpc playlist -f "$fmt" | awk '{print NR "\\" $0}' | sed "s/^$pos\\\/[>\\\/" > "$PLAYLIST"
