@@ -541,17 +541,15 @@ __get_one_album() {
     while [ "$match" -eq 0 ]; do
 	if [[ -z "$*" ]]; then
 	    album="$(mpc listall | shuf -n 1)"
-	    album="${album%/*}"
-	    [[ $(__is_in_history "$album") == 1 ]] && match=1
 	else
 	    album="$(search_tag "$@" | shuf -n 1)"
 	    if [[ -z "$album" ]]; then
-		echo "MPCW: no album were found. [$*]"
+		echo "MPCW: no album were found. [$*]" >&2
 		return 1
 	    fi
-	    album="${album%/*}"
-	    [[ $(__is_in_history "$album") == 1 ]] && match=1
 	fi
+	album="${album%/*}"
+	[[ $(__is_in_history "$album") == 1 ]] && match=1
     done
     echo "$album"
 }
