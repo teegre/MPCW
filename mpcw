@@ -146,7 +146,7 @@ __say() {
     local radio
     radio="$(reads station)"
     [[ -n "$radio" ]] && {
-	(! type espeak >/dev/null) || {
+	type espeak >/dev/null && {
 	    local artist
 	    artist="$(getinfo artist)"
 	    local title

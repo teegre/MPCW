@@ -21,8 +21,8 @@ As you rate the songs, playlists are automatically generated according to your m
 - **Voice over**: occasionally say current song's title or the actual time.
 - **Title display** with scrolling effect in *polybar* or similar.
 
-*Dependencies: mpd, mpc, dunst, wget, jq, sqlite3*  
-*Optional dependencies: espeak and mpv (for voice over)*
+*Dependencies: mpd, mpc, dunst, wget, jq, sqlite3, font awesome.*  
+*Optional dependencies: espeak and mpv (for voice over).*
 
 *Note: **MPCW** assumes songs are stored in directories such as "**artist/album**".*
 
@@ -159,11 +159,11 @@ This information are also visible in notifications.
 |-         |**ins** URI                 |**Insert song(s)** after current song.
 |-         |**move** FROM_POS TO_POS    |**Move track.**
 |-         |**del** [FROM_]POS [-TO_POS]|Delete song(s) from the playlist.
-|**cr**    |-                           |Crop playlist. Delete all songs except current one.
+|crop      |**cr**                      |Crop playlist. Delete all songs except current one.
 |**clr**   |-                           |Clear playlist. If song, album or SIMA mode is enabled, new tracks are added to the playlist.
-|**getrnd** COUNT SONG|ALBUM|rnd        |Return [count] song(s) or album(s).
-|see_album |**ca**                      |Display album for the currently playing song.
-|see_artist|**cl**                      |Display albums for the currently playing artist.
+|getrnd COUNT SONG\|ALBUM|**rnd**       |Return COUNT song(s) or album(s).
+|see_album |**cl**                      |Display album for the currently playing song.
+|see_artist|**ca**                      |Display albums for the currently playing artist.
 |status    |**si**                      |Display current song info.
 
 
