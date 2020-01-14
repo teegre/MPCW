@@ -6,8 +6,17 @@
 # | '_ ` _ \| '_ \ / __\ \ /\ / / #
 # | | | | | | |_) | (__ \ V  V /  #
 # |_| |_| |_| .__/ \___| \_/\_/   #
-#           |_| version 0.2       #
+#           |_| version 0.3       #
 ###################################
+
+# VARIABLES
+
+declare -r MPCW_SETTINGS="$HOME/.config/mpcw/settings"
+declare -r MPCW_HIST="$HOME/.config/mpcw/history"
+declare -r MPCW_LOG="$HOME/.config/mpcw/log"
+declare -r MPCW_SIMA="$HOME/.config/mpcw/artists"
+declare -r STICKER_DB="$HOME/.config/mpd/sticker.sql"
+declare -r MPCW_LOCK="$HOME/.config/mpcw/lock"
 
 # ALIASES
 
@@ -16,14 +25,13 @@ alias new="mpc -q stop; mpc -q clear; mpc -q add"
 alias list="mpc ls"
 alias ins="mpc insert"
 alias del="mpc -q del"
-alias clr="mpc -q clear"
-alias cr="mpc -q crop"
+alias cr="crop"
 alias sta="stop_after_current" # stop after current
-alias si="mpc -q single"
+alias sn="mpc -q single"
 alias rn="mpc -q random; status random"
 alias rp="mpc -q repeat; status repeat"
 alias cs="mpc -q consume; status consume"
-alias np="status;status progress; rating s; playcount; lastplayed; skipcount"
+alias si="status"
 alias rnd="getrnd"
 alias nx="mpc -q next"
 alias pv="mpc -q prev"
@@ -43,32 +51,33 @@ alias p="toggle"
 alias pl="play"
 alias pla="play_album"
 alias aa="add_album"
+alias insa="ins_album"
 alias nxa="next_album"
 alias s="stop"
 alias sk="skip"
 alias usk="unskip"
 alias skl="set_skip_limit"
-alias seeal="see_album"
-alias seear="see_artist"
+alias ca="see_artist"
+alias cl="see_album"
 alias seek="mpc -q seek"
 alias upd="((mpc -q update --wait && notify-send 'MPCW: Update finished') &)"
-
-# VARIABLES
-
-declare -r MPCW_SETTINGS=$HOME/.config/mpcw/mpcw.settings
-declare -r MPCW_HIST=$HOME/.config/mpcw/mpcw.hist
-declare -r MPCW_LOG=$HOME/.config/mpcw/mpcw.log
-declare -r MPCW_SIMA=$HOME/.config/mpcw/mpcw.artists
-declare -r STICKER_DB=$HOME/.config/mpd/sticker.sql
-declare -r MPCW_LOCK=$HOME/.config/mpcw/mpcw.lock
-declare -r MPCW_NTF='
-%artist%
-%title%
-%album%
-[%date%]'
-declare -r MPCW_FMT='artist %artist%\ntitle %title%\nalbum %album%\ndate %date%'
+alias lh="clear; tail -f ${MPCW_HIST}"
+alias llog="clear; tail -f ${MPCW_LOG}"
 
 #
+
+__is_mpd_running() {
+    (>/dev/null pgrep "mpd$") && return 0 || return 1
+}
+
+__send_cmd() {
+    local host
+    local port
+    host="${MPD_HOST:-"localhost"}"
+    port="${MPD_PORT:-6600}"
+    printf '%s\n;KO\n' "${*:-}" \
+    | nc "$host" "$port"
+}
 
 logme() {
     echo "$(now) --- $*" >> "$MPCW_LOG"
@@ -82,6 +91,7 @@ reads() {
 	settings="volume 100
 nonstop off
 filter off
+station music non-stop radio
 clean 1 month
 skip 2
 voice off
@@ -91,7 +101,7 @@ single off"
     fi
     local result
     [[ -z "$1" ]] && {
-	echo "$0: options:"
+	echo "reads: options:"
 	result="$(awk '{print "| " $1}' "$MPCW_SETTINGS")"
     } || result="$(sed -n "s/$1 //p" "$MPCW_SETTINGS")"
     [[ -z "$result" ]] && return 1
@@ -109,26 +119,32 @@ writes() {
 }
 
 media_update() {
+    local ntf_fmt='artist %artist%\ntitle %title%\nalbum %album%\ndate %date%'
+    if ! __is_mpd_running; then
+	echo > "$HOME/.config/currentmedia"
+    else
         {
 	    echo "status" "$(pstatus)"
-            mpc current -f "$MPCW_FMT"
+            mpc current -f "$ntf_fmt"
         } > "$HOME/.config/currentmedia"
-
-        killall -s HUP "mpcwt" 2>/dev/null
+    fi
+    killall -s HUP "mpcwt" 2>/dev/null
 }
 
 __say() {
     # say current artist and title.
     [[ $(reads voice) == "off" ]] && return
-    [[ $(pstatus) != "[playing]" ]] && return
-    [[ $(getinfo album) == "MNSR Jingles" ]] && return
+    [[ $(pstatus) != "play" ]] && return
+    [[ "$(getinfo file)" = *[![:ascii:]]* ]] && return
+    #[[ $(getinfo album) == "MNSR Jingles" ]] && return
+    local duration
+    duration="$(status duration)"
+    duration="${duration//.*}"
+    [[ $duration -lt 120 ]] && return
     local TMPWAV
     TMPWAV="$(mktemp)"
     local radio
-    case "$(reads nonstop)" in
-	"song") radio="MUSIC NON STOP RADIO";;
-	"sima") radio="SIMA RADIO";;
-    esac
+    radio="$(reads station)"
     [[ -n "$radio" ]] && {
 	(! type espeak >/dev/null) || {
 	    local artist
@@ -136,13 +152,19 @@ __say() {
 	    local title
 	    title="$(getinfo title)"
 	    local msg
-	    msg="...You are listening to: $artist, $title... On $radio."
-	    espeak -v en+f4 -w "$TMPWAV" -s 140 2>/dev/null <<< echo "$msg"
-	    if [[ "$title" == "$(getinfo title)" && $(pstatus) == "[playing]" ]]; then
+	    if [[ "$1" == "time" ]]; then
+		msg="... It is now: $(LC_TIME="C" date "+%l:%M %p")... On $radio."
+	    else 
+		msg="... You are listening to: $artist, $title... On $radio."
+	    fi
+	    local voice
+	    voice="f$((RANDOM%3+2))"
+	    espeak -v en+$voice -w "$TMPWAV" -s 140 2>/dev/null <<< "$msg"
+	    if [[ "$title" == "$(getinfo title)" && $(pstatus) == "play" ]]; then
 		local volume
 		volume=$(reads volume)
 		local new_vol=$((volume-volume*30/100))
-		mpc -q volume  "$new_vol"
+		mpc -q volume  "$new_vol" 
 		mpv --no-terminal --volume "$volume" "$TMPWAV"
 		mpc -q volume "$volume"
 		rm "$TMPWAV"
@@ -156,19 +178,20 @@ __clean() {
     freq="$(reads clean)"
     local date
     date=$(date -d "now -$freq" "+%Y-%m-%d")
+    local TMPHIST
+    TMPHIST="$(mktemp)"
     cp "$MPCW_HIST" "$MPCW_HIST.backup"
-    awk '$1 > "'"$date"'"' "$MPCW_HIST" > "$MPCW_HIST.tmp"
-    if [[ -n $(diff "$MPCW_HIST" "$MPCW_HIST.tmp") ]]; then
-	 logme "cleaned history until $date."
+    awk '$1 > "'"$date"'"' "$MPCW_HIST" > "$TMPHIST"
+    if [[ -n $(diff "$MPCW_HIST" "$TMPHIST") ]]; then
+	 logme "[clean] => $date."
 	 rm "$MPCW_HIST"
-	 mv "$MPCW_HIST.tmp" "$MPCW_HIST"
+	 mv "$TMPHIST" "$MPCW_HIST"
     else
-	rm "$MPCW_HIST.tmp"
+	rm "$TMPHIST"
     fi
-
 }
 
-clean_freq() {
+set_clean_freq() {
     local error
     if [ "$*" ]; then
 	local arg1
@@ -187,62 +210,80 @@ clean_freq() {
 	error=1
     fi
     if [[ "$error" == 1 ]]; then
-	echo "usage: $0 <num> < day(s) | week(s) | month(s) | year(s) >"
+	__err -n "usage: set_clean_freq count day(s) | week(s) | month(s) | year(s)"
+	return 1
     else
 	writes clean "$arg1" "$arg2"
+	__clean
     fi
 }
 
 toggle() {
-    if [[ "$(pstatus)" == "[stopped]" ]]; then
-	play "$@"
-    else
-	pause
-    fi
+    pause
 }
 
 pause() {
-    if [[ "$(pstatus)" == "[playing]" ]]; then
+    ! __is_mpd_running && return 1
+    if [[ "$(pstatus)" == "play" ]]; then
 	mpc -q pause
-	logme "[PAUSED]"
+	logme "[pause] $(pstatus icon)"
     else
+	# shellcheck disable=SC2119
         play
     fi
 }
 
+# shellcheck disable=SC2120
 play() {
+    ! __is_mpd_running && return 1
     echo > "$MPCW_LOCK"
     local volume
-    local nonstop
+    local mode
     volume="$(reads volume)"
-    nonstop="$(reads nonstop)"
-    logme "[PLAYING] mode::$nonstop; volume::$volume; items::$(mpc playlist | wc -l)"
-    if [[ "$(pstatus)" == "[stopped]" ]] && [[ $nonstop != "off" ]]; then
-        if ! handle_playlist; then
+    mode="$(reads nonstop)"
+    [[ "$(pstatus)" == "play" && -z "$*" ]] && return
+    if [[ "$(pstatus)" == "stop" ]] && [[ $mode != "off" ]]; then
+        if ! handle_playlist "$@"; then
             mpc -q --wait play "$@"
 	    sleep 0.1
 	    mpc -q volume "$volume"
 	fi
-    elif [[ $nonstop == "off" ]]; then
+    elif [[ $mode == "off" ]]; then
 	mpc -q random off
 	mpc -q crossfade 0
 	mpc -q replaygain auto
 	writes voice off
         mpc -q --wait play "$@"
-	sleep 0.1
+	sleep 0.5
 	mpc -q volume "$volume"
     else
         mpc -q --wait play "$@"
 	sleep 0.1
 	mpc -q volume "$volume"
     fi
+    logme "[$(pstatus)] $(pstatus icon)"
     rm "$MPCW_LOCK" 2>/dev/null
 }
 
 play_album() {
     # play current song's album
     # if first track of the said album is playing, don't stop
-    if [[ $(pstatus) == "[playing]" ]]; then
+    ! __is_mpd_running && return 1
+    [[ -n "$*" ]] && {
+	ins_album --now "${@}"
+        return
+    }
+    if [[ $(pstatus) == "play" ]]; then
+	local mode
+	mode="$(reads nonstop)"
+	[[ "$mode" == "song"  && "$(status random)" == "off" ]] && {
+	    __err -l "MPCW: already playing this album."
+	    return 1
+	}
+        [[ "$mode" == "album" ]] && {
+	    __err -l "MPCW: already in album mode."
+	    return 1
+	}
         album="$(getinfo file)"
         album="${album%/*}"
 	[[ "$(mpc ls "$album" | wc -l)" == 1 ]] && return
@@ -260,15 +301,28 @@ play_album() {
         fi
 	mpc -q replaygain album
 	writes voice off
-	echo "MPCW: now playing album: $(mpc current -f "%artist% - %album%")"
+	__err -l "MPCW: now playing album: $(mpc current -f "%artist% - %album%")"
+	logme "[play][album] $(pstatus icon)"
     else
-        echo "MPCW: not playing."
+        __err -l "MPCW: not playing."
+	return 1
     fi
 }
 
 add_album() {
     # add current song's album.
-    if [[ $(pstatus) == "[playing]" ]]; then
+    ! __is_mpd_running && return 1
+    if [[ $(pstatus) == "play" ]]; then
+	local mode
+	mode="$(reads nonstop)"
+	[[ "$mode" == "song"  && "$(status random)" == "off" ]] && {
+	    __err -l "MPCW: already playing this album."
+	    return 1
+	}
+        [[ "$mode" == "album" ]] && {
+	    __err -l "MPCW: already in album mode."
+	    return 1
+	}
 	album="$(getinfo file)"
 	album="${album%/*}"
 	[[ "$(mpc ls "$album" | wc -l)" == 1 ]] && return
@@ -278,14 +332,53 @@ add_album() {
 	mpc -q crop
 	mpc -q add "$album"
 	[[ "$(getinfo track)" == 1 ]] && mpc -q del 2
-	echo "MPCW: added album: $(mpc current -f "%artist% - %album%")"
 	writes voice off
+	__err -l "MPCW: added album: $(mpc current -f "%artist% - %album%")"
+	logme "[play][album] $(pstatus icon)"
+    else
+	__err -l "MPCW: not playing"
+	return 1
     fi
 }
 
+ins_album() {
+    # add a given album after current song.
+    ! __is_mpd_running && return 1
+    [[ "$(pstatus)" == "stop" ]] && {
+	__err -l "MPCW: not playing."
+        return 1
+    }
+    local play_now=0
+    [[ "$1" == "--now" ]] && {
+	play_now=1
+        shift
+    }
+    [[ -z "$1" || -z "$2" ]] && {
+	__err -l "MPCW: argument missing."
+        return 1
+    }
+    local result
+    result="$(search_tag artist "$1" album "$2")"
+    if [[ -n "$result" ]]; then
+	mpc -q random off
+	mpc -q crossfade 0
+	mpc -q replaygain album
+	mpc -q crop
+	mpc -q add <<< "$result"
+	[[ "$play_now" == 1 ]] && mpc -q play 2 && mpc del 1
+	writes voice off
+	logme "[play][album] $(pstatus icon)"
+    else
+	__err -l "MPCW: nothing found."
+	return 1
+    fi
+    return 0
+}    
+
 see_album() {
     # display current song's album.
-    if [[ $(pstatus) != "[stopped]" ]]; then
+    ! __is_mpd_running && return 1
+    if [[ $(pstatus) != "stop" ]]; then
         album="$(getinfo file)"
 	album="${album%/*}"
 	mpc ls "$album" | less -F
@@ -294,7 +387,8 @@ see_album() {
 
 see_artist() {
     # display current artist's albums.
-    if [[ $(pstatus) != "[stopped]" ]]; then
+    ! __is_mpd_running && return 1
+    if [[ $(pstatus) != "stop" ]]; then
         artist="$(getinfo file)"
 	artist="${artist%%/*}"
 	mpc ls "$artist" | less -F
@@ -302,28 +396,33 @@ see_artist() {
 }
 
 next_album() {
-    if [[ $(pstatus) == "[playing]" &&
+    ! __is_mpd_running && return 1
+    if [[ $(pstatus) == "play" &&
 	$(reads nonstop) == "album" ]]; then
-        mpc -q stop
-	mpc -q clear
+        clr
     else
-	echo "MPCW: not in album mode!"
+	__err -n "MPCW: not in album mode!"
     fi
 }
 
 __is_in_history() {
     grep -Fq "$1" "$MPCW_HIST" 2>/dev/null
-    echo $?
+    return $?
 }
 
 __is_in_playlist() {
-    mpc playlist -f "%file%" > "current"
-    grep -Fq "$1" "current" 2>/dev/null
-    echo $?
-    rm "current" 2>/dev/null
+    ! __is_mpd_running && return 1
+    local TMPCUR
+    TMPCUR="$(mktemp)"
+    mpc playlist -f "%file%" > "$TMPCUR"
+    grep -Fq "$1" "$TMPCUR" 2>/dev/null
+    local result=$?
+    rm "$TMPCUR"
+    return $result
 }
 
 search() {
+    ! __is_mpd_running && return 1
     if [ "$*" ]; then
         command="mpc search"
         for ARG in "$@"; do
@@ -334,54 +433,65 @@ search() {
 }
 
 search_tag() {
-    local error
+    ! __is_mpd_running && return 1
     if [ "$*" ]; then
-        if ! ( mpc search "$@" 2>/dev/null ); then
-	    error=1
-	else
-	    error=0
-	fi
+        ! mpc search "$@" 2>/dev/null && error=1 || error=0
     else
 	error=1
     fi
-    [[ "$error" -eq 1 ]] &&
+    [[ "$error" == 1 ]] &&
     (
-	echo "MPCW: [$*] did not return any result!"
-	echo "usage: $0 <tag> <value> ... <tag> <value>"
+	__err -n "MPCW: [$*] did not return any result!"
+	__err -n "usage: search_tag <tag> <value> ... <tag> <value>"
 	return 1
     )
+    return 0
 }
 
 find_tag() {
+    ! __is_mpd_running && return 1
     local error
     if [ "$*" ]; then
-	if ! (mpc find "$@" 2>/dev/null); then
-	    error=1
-	else
-	    error=0
-	fi
+	! mpc find "$@" 2>/dev/null && error=1 || error=0
     else
 	error=1
     fi
     [[ "$error" -eq 1 ]] && {
-	echo "MPCW: [$*] did not return any result!"
-	echo "usage: $0 <tag> <value> ... <tag> <value>"
+	__err -n "MPCW: [$*] did not return any result!"
+	echo "usage: find_tag tag value ... tag value"
 	return 1
     }
 }
    
-__search() {
-    echo "select uri from sticker where name=\"$1\" and value $2 $3;"
-    sqlite3 "$STICKER_DB" "select uri from sticker where name=\"$1\" and value $2 $3;"
+__search_uri() {
+
+sqlite3 "$STICKER_DB" <<END_SQL
+.timeout 2000
+SELECT uri FROM sticker
+WHERE name="$1" AND value$2
+ORDER BY ${3:-Random()};
+END_SQL
+}
+
+__search_by_uri() {
+
+sqlite3 "$STICKER_DB" <<END_SQL
+.timeout 2000
+SELECT value FROM sticker
+WHERE uri$1 AND name="$2"
+ORDER BY uri;
+END_SQL
 }
 
 skipcount() {
+    ! __is_mpd_running && return 1
     local skipcount
     skipcount=$(mpc sticker "$(getinfo file)" get "skipcount" 2>/dev/null)
     echo "${skipcount:-"skipcount=0"}"
 }
 
 playcount() {
+    ! __is_mpd_running && return 1
     local playcount
     local song
     song="$(mpc current -f "%artist% - %title%" | tr '[:upper:]' '[:lower:]')"
@@ -390,20 +500,24 @@ playcount() {
 }
 
 lastplayed() {
+    ! __is_mpd_running && return 1
     lastplayed=$(mpc sticker "$(getinfo file)" get "lastplayed" 2>/dev/null)
     [[ -n $lastplayed ]] && echo "$lastplayed"
 }
 
 skip() {
+    ! __is_mpd_running && return 1
     local skipcount
     (($(skipcount)))
     ((skipcount+=1))
     mpc sticker "$1" set "lastplayed" "$(now)" 2>/dev/null
     mpc sticker "$(getinfo file)" set "skipcount" "$skipcount" 2>/dev/null
+    update_stats
     mpc -q next
 }
 
 unskip() {
+    ! __is_mpd_running && return 1
     local song
     if [[ -z "$1" ]]; then
 	song="$(getinfo file)"
@@ -414,34 +528,34 @@ unskip() {
 }
 
 set_skip_limit() {
+    ! __is_mpd_running && return 1
     if [[ $1 =~ ^[0-9]+$ ]]; then
 	writes skip "$1"
     else
-	echo "MPCW: skip_limit=$(reads skip)"
+	__err -l "MPCW: skip limit set to $(reads skip)"
     fi
 }
 
 stop() {
+    ! __is_mpd_running && return 1
     echo > "$MPCW_LOCK"
     mpc -q stop
-    logme "[STOPPED]"
     rm "$MPCW_LOCK"
 }
 
 stop_after_current() {
+    ! __is_mpd_running && return 1
     mpc -q single
     writes single "$(status single)"
+    logme "[stop after current] $(reads single)"
+    __err -l "MPCW: stop after current $(status single)"
 }
 
 vol() {
-    local notify=1
-    if [[ "$1" == "-n" ]]; then
-	notify=0
-	shift
-    fi
+    ! __is_mpd_running && return 1
     if [ -z "$1" ]; then
 	reads volume
-    elif [[ "$(pstatus)" != "[stopped]" ]]; then
+    elif [[ "$(pstatus)" != "stop" ]]; then
 	mpc -q volume "$1"
 	writes volume "$(status volume)"
     elif [[ "$1" =~ ^[\+\|\-] ]]; then
@@ -454,15 +568,17 @@ vol() {
     else
 	writes volume "$1"
     fi
-    [[ "$notify" == 0 ]] &&
-	notify-send -u normal -t 1000 "MPCW: Volume $(reads volume)%" 
+    __err -n "MPCW: volume $(reads volume)%" 
 }
 
 dim() {
     # -6dB dimmer.
-    [[ $(pstatus) == "[stopped]" || $(pstatus) == "[paused]" ]] &&
+    ! __is_mpd_running && return 1
+    local state
+    state=$(pstatus)
+    [[ $state == "stop" || $state == "pause" ]] &&
 	{
-	    echo "MPCW: not playing"
+	    __err -n "MPCW: not playing"
     	    return
 	}
     local current_volume
@@ -471,29 +587,16 @@ dim() {
     saved_volume="$(reads volume)"
     if [[ $current_volume -lt $saved_volume ]]; then
 	mpc -q volume "$saved_volume"
-	if [[ -z "$1" ]]; then
-	    echo "MPCW: dim off."
-	elif [[ "$1" == "-n" ]]; then
-	    notify-send -u normal -t 1000 "MPCW: dim off"
-	else
-	    echo "MPCW: dim off."
-	    echo "usage: $0 [-n]"
-	fi
+	__err -n "MPCW: dim off."
     elif [[ $current_volume -eq $saved_volume ]]; then
 	((current_volume/=2))
 	mpc -q volume $current_volume
-	if [[ -z "$1" ]]; then
-	    echo "MPCW: dim on"
-	elif [[ "$1" == "-n" ]]; then
-	    notify-send -u normal -t 1000 "MPCW: dim on"
-	else
-	    echo "MPCW: dim on."
-	    echo "usage: $0 [-n]"
-	fi
+	__err -n "MPCW: dim on"
    fi
 }
 
 getinfo() {
+    ! __is_mpd_running && return 1
     if [ "$1" ]; then
 	local info
 	info=$(mpc current -f "%$1%")
@@ -505,68 +608,143 @@ getinfo() {
 }
 
 getnext() {
+    ! __is_mpd_running && return 1
     local command
     command=$(mpc queued -f "%$1%")
     [[ $command == "%"* ]] || echo "$command"
 }
 
-__get_one_song() {
-    local song
-    local skc
-    local skl
-    skl="$(reads skip)"
+__get_songs() {
+    ! __is_mpd_running && return 1
+
+    local count=0
     local match=0
-    while [[ "$match" == 0 ]]; do
-	if [[ -z "$*" ]]; then
-	    song="$(mpc listall | shuf -n 1)"
-	else
-	    song="$(search_tag "$@" | shuf -n 1)"
-	    if [[ -z "$song" ]]; then
-		echo "MPCW: no song was found. [$*]" >&2
-		return 1
+    local C value total
+    declare -A songs
+    
+    C=$1
+    value="$2"
+
+    __filter
+
+    if [[ -n $value ]]; then
+	total="$(__search_uri "rating" "=$value" | wc -l)"
+    elif [[ -z $MPCW_FILTER ]]; then
+	total="$(mpc listall | wc -l)"
+    fi
+    [[ -n $MPCW_FILTER ]] &&
+	total="$(search_tag "${MPCW_FILTER[@]}" | wc -l)"
+
+    if [[ $total == 0 ]]; then
+	return 0
+    fi
+    
+    while [ $count -lt "$C" ] && [ "$total" -gt 0 ]; do
+
+	while [ $match -eq 0 ]; do
+	    if [[ -n $MPCW_FILTER ]]; then
+		song="$(search_tag "${MPCW_FILTER[@]}" | shuf -n 1)"
+	    elif [[ -n $value ]]; then
+		song="$(__search_uri "rating" "=$value" "uri" | shuf -n 1)"
+	    elif [[ -z $MPCW_FILTER ]]; then
+		song="$(mpc listall | shuf -n 1)"
 	    fi
-	fi
-	(($(mpc sticker "$song" get "skipcount" 2>/dev/null)))
-	skc=${skipcount:-0}
-	[[ $skc -ge $skl ]] && continue
-	[[ $(__is_in_history "$song") == 0 ||
-	    $(__is_in_playlist "$song") == 0 ]] || match=1
+
+	    [[ -n "${songs["$song"]}" ]] && continue
+
+	    if ! __is_in_history "$song" && ! __is_in_playlist "$song"; then
+		if [[ -z $MPCW_FILTER ]] && [[ -z $value ]]; then
+		    [[ "$(__search_by_uri "=\"$song\"" "skipcount")" -lt "$(reads skip)" ]] &&
+		    {
+			match=1
+			((count++))
+		    }
+		else
+		    match=1
+		    ((count++))
+		fi
+	    elif [[ -z "${songs["$song"]}" ]]; then
+		songs["$song"]=1
+		unset song
+		((total--))
+	    fi
+	    if [[ "$total" == 0 ]]; then
+		__err -u "MPCW: all songs have been played within $(reads clean)(s)!"
+		return $count
+	    fi
+	done
+	match=0
+	[[ -n "$song" ]] && echo "$song"
     done
-    echo "$song"
+    return $count
 }
 
 __get_one_album() {
+    ! __is_mpd_running && return 1
+    local artist
     local album
+    local artist_count
+    local album_count
+    local prev_artist
     local match=0
+    artist_count="$(mpc ls | wc -l)"
+    if [[ -t 1 ]]; then
+	__err -l "MPCW: searching album(s)..."
+    else
+	dunstify -r 777 "MPCW: searching album(s)..."
+    fi
     while [ "$match" -eq 0 ]; do
 	if [[ -z "$*" ]]; then
-	    album="$(mpc listall | shuf -n 1)"
+	    #( >&2 echo "artist count: $artist_count" )
+	    [[ "$artist_count" == 0 ]] && {
+		__err -u "MPCW: all albums have been played within $(reads clean)"
+	        return 1
+	    }
+	    artist="$(mpc ls | shuf -n 1)"
+	    [[ "$artist" == "$prev_artist" ]] && continue
+	    #( >&2 echo "artist: $artist" )
+	    album_count="$(mpc ls "$artist" | wc -l)"
+	    #( >&2 echo "album count: $album_count" )
+	    while [ "$album_count" -gt 0 ]; do
+		album="$(mpc ls "$artist" | shuf -n 1)"
+		if ! __is_in_history "$album"; then
+		    #( >&2 echo "album: $album" )
+		    match=1
+		    break
+		else
+		    unset album
+		    ((album_count--))
+		fi
+	    done
+	    if [[ "$album_count" == 0 ]]; then
+		((artist_count--))
+		prev_artist="$artist"
+	    fi
 	else
+	    #FIXME: what if there's no album left to play?
 	    album="$(search_tag "$@" | shuf -n 1)"
 	    if [[ -z "$album" ]]; then
-		echo "MPCW: no album were found. [$*]" >&2
+		__err -u "MPCW: no album were found. [$*]"
 		return 1
 	    fi
 	fi
-	album="${album%/*}"
-	[[ $(__is_in_history "$album") == 1 ]] && match=1
     done
     echo "$album"
 }
 
 getrnd() {
     # get random songs / albums
+    ! __is_mpd_running && return 1
     if [[ $1 =~ ^[0-9]+$ ]]; then
-        local count
-	count=$1
+        local count=$1
 	shift
-	local i=0
         case "$1" in
             album)
 		local album
+		local i=0
                 if [[ "$2" == "off" ]] || [[ -z "$2" ]]; then
 		    while [ $i -lt "$count" ]; do
-			__get_one_album
+			__get_one_album || return 1
 			((i++))
 		    done
 		else
@@ -578,23 +756,43 @@ getrnd() {
 		fi
 	        ;;
 	    song)
-		if [[ "$2" == "off" ]] || [[ -z "$2" ]]; then
-		    while [ $i -lt "$count" ]; do
-			__get_one_song
-			((i++))
-		    done
+		if [[ "$(reads filter)" == "off" ]]; then
+		    local C=$count
+		    local T R5 R4 PR
+		    #total songs
+		    T="$(__send_cmd stats | awk '$1=="songs:" {print $2}')"
+		    #loved songs
+		    R5="$(__search_uri "rating" "=10" | wc -l)"
+		    #liked songs
+		    R4="$(__search_uri "rating" "=8" | wc -l)"
+		    
+		    #% of loved songs
+		    ((PR=C*R5/T))
+		    PR=${PR//.*}
+		    __get_songs $PR 10
+		    v=$?
+		    ((count-=v))
+
+		    #% of liked songs
+		    ((PR=C*R4/T))
+		    PR=${PR//.*}
+		    __get_songs $PR 8
+		    v=$?
+		    ((count-=v))
+
+		    #other songs
+		    [[ $count -gt 0 ]] && __get_songs $count && return 1
 		else
-		    shift
-		    while [ $i -lt "$count" ]; do
-			__get_one_song "$@" || return 1
-			((i++))
-		    done
+		    __get_songs $count
+		    v=$?
+		    ((count-=v))
+		    __get_songs $count && return 1
 		fi
 		;;
-	    *) echo "MPCW: invalid argument. [$1]" >&2
+	    *) __err -l "MPCW: invalid argument. [$1]"
       esac
     else
-	echo "usage: $0 <number> < song | album > [ <tag> <value> ... <tag> <value> ]"
+	__err -n "usage: getrnd <count> < song | album >"
 
     fi
 }
@@ -603,6 +801,9 @@ __icchk() {
     # check if an internet connection is up and running.
     for interface in /sys/class/net/[\!lo]*; do
 	if [[ "$(cat "$interface/carrier")" == 1 ]]; then
+	    local iconn
+	    iconn="$(nmcli -t -m multiline connection show --active 2>/dev/null)"
+	    [[ -z $iconn ]] && return 1
 	    return 0
 	else
 	    return 1
@@ -622,12 +823,12 @@ __getsima() {
 
 getsima() {
     # get songs for a list of similar artists.
-    # if no songs are found, pick a random one.
-    logme "GETSIMA: getsima called for $1."
+    ! __is_mpd_running && return 1
+    logme "[sima] $1."
     if ! __icchk; then
-	echo "MPCW: no internet connection!"
-	echo "MPCW: SIMA mode needs access to the internet..."
-	logme "GETSIMA: no internet!"
+	__err -n "MPCW: no internet connection!"
+	__err -n "MPCW: SIMA mode needs access to the internet..."
+	logme "[sima] no internet!"
 	return 1
     fi
     __getsima "$1"
@@ -641,8 +842,8 @@ getsima() {
 	    while :; do
 		song="$(find_tag artist "$artist" | shuf -n 1)"
 		if [[ -n "$song" ]]; then
-		    if ! [[ $(__is_in_history "$song") == 0 &&
-			$(__is_in_playlist "$song") == 1 ]]; then
+		    if ! __is_in_history "$song" &&
+			! __is_in_playlist "$song"; then
 			echo "$song"
 			((n++))
 			break
@@ -657,40 +858,48 @@ getsima() {
 	unset data
 	rm "$MPCW_SIMA"
 	[[ $n -gt 0 ]] && {
-	    logme "GETSIMA: found $n songs."
+	    logme "[sima] found $n songs."
             return
 	}
     }
 #    mpc listall | shuf -n 1
-    logme "GETSIMA: no song were found."
+    logme "[sima] no song were found."
 }
 
 musicnonstop() {
     # enable non-stop mode 
+    # ... if daemon is not running, cannot do that...
+    if ! [[ -a "$HOME/.config/mpcw/mpcw.pid" ]]; then
+	__err -n "MPCW: daemon must be running to use this feature."
+	return 1
+    fi
     case "$1" in
-	album) writes nonstop album;;
-	song) writes nonstop song;;
-	sima) writes nonstop sima;;
-	off) writes nonstop off;;
-	help) echo "usage: $0 < album | song | sima > [ <tag> <value> ... <tag> <value> ]"; return 1;;
-	*) echo "$0: $(reads nonstop) | filter: $(reads filter)"; return 1
+	album) writes nonstop album; logme "[mode] $1";;
+	song) writes nonstop song; logme "[mode] $1";;
+	sima) writes nonstop sima; logme "[mode] $1";;
+	off) writes nonstop off; logme "[mode] $1";;
+	*) echo "musicnonstop: $(reads nonstop) | filter: $(reads filter)"; return 1
     esac
     shift
     if [ "$*" ]; then
 	if [[ "$(reads nonstop)" == "sima" ]]; then
-	    echo "music non-stop: no filter allowed in sima mode."
-	    echo "music non-stop: setting to <off>."
+	    __err -n "music non-stop: no filter allowed in sima mode."
+	    __err -n "music non-stop: filter set to <off>."
 	    writes filter off
 	else
+	    #TODO: check user input (syntax: tag::value::tag::value)
 	    writes filter "$*"
+	    __filter
+	    logme "[filter] ${MPCW_FILTER[*]}"
 	fi
     else
 	writes filter off
     fi
-    echo "$0: $(reads nonstop) | filter: $(reads filter)"
+    __err -n "music non-stop: $(reads nonstop) | filter: $(reads filter)"
 }
 
 pls() {
+    ! __is_mpd_running && return 1
     local pos
     local fmt
     local cols
@@ -709,50 +918,81 @@ pls() {
     rm "$PLAYLIST" 2>/dev/null
 }
 
+crop() {
+    ! __is_mpd_running && return 1
+    mpc -q crop
+    if [[ "$(reads nonstop)" != "off" ]]; then
+	handle_playlist
+    fi
+}
+
+clr() {
+    ! __is_mpd_running && return 1
+    local mode
+    mode="$(reads nonstop)"
+    if [[ $mode != "off" && $(pstatus) != "stop" ]]; then
+	mpc -q crop
+	handle_playlist
+	mpc -q del 1
+    else
+	mpc -q clear
+    fi
+}
+
 hist() {
     tac "$MPCW_HIST" | less -F
 }
 
+__filter() {
+    unset MPCW_FILTER
+    local f
+    f="$(reads filter)"
+    [[ "$f" == "off" ]] && return
+    local opt
+    if [[ -n "$ZSH_NAME" ]]; then
+	f="${f//'::'/\n}"
+	#shellcheck disable=SC2116
+	MPCW_FILTER=("${(@f)$(echo "$f")}")
+    else
+	IFS=$'\n' read -d "" -ra MPCW_FILTER <<< "${f//'::'/$'\n'}"
+    fi
+}
+
+
 handle_playlist() {
     # handle playlist in non-stop mode
+    ! __is_mpd_running && return 1
     local mode
     mode="$(reads nonstop)"
-    if [[ "$mode" != "off" ]] && [[ -z "$(getnext file)" || -z "$(pls)" ]]; then
-	[[ "$(mpc playlist | wc -l)" -gt 1 ]] && return 1
-	logme "[H] mode::$mode; items::$(mpc playlist | wc -l)"
+    [[ "$(mpc playlist | wc -l)" -gt 1 ]] && return 1
+    if [[ "$mode" != "off" ]] && [[ -z "$(getnext file)" || "$(mpc playlist | wc -l)" == 0 ]]; then
+	logme "[playlist] $0"
         case "$mode" in
             "album")
-		local filter
-		if [[ "${SHELL##*/}" == "zsh" ]]; then
-		    #shellcheck disable=SC2207
-		    filter=( $(reads filter) )
+		local album
+		album="$(getrnd 1 album )"
+		if [[ -n "$album" ]]; then
+		    mpc -q add "$album"
+		    mpc replaygain album
+		    mpc -q crossfade 0
+		    mpc -q consume on
+		    mpc -q random off
+		    writes voice off
+		    logme "$(pstatus icon) added new album."
 		else
-		    read -ra filter <<< "$(reads filter)"
+		    __err -u "MPCW: no album found!"
+		    return 1
 		fi
-		getrnd 1 album "${filter[@]}" | mpc -q add 2>/dev/null
-		mpc replaygain album
-		mpc -q crossfade 0
-		mpc -q consume on
-		mpc -q random off
-		writes voice off
-		logme "[H] added new album."
 		;;
 	    "song")
-		local filter
-		if [[ "${SHELL##*/}" == "zsh" ]]; then
-		    #shellcheck disable=SC2207
-		    filter=( $(reads filter) )
-		else
-		    read -ra filter <<< "$(reads filter)"
-		fi
-		getrnd 10 song "${filter[@]}" | mpc -q add 2>/dev/null
-		mpc -q ls mnsr/jingles | shuf -n 1 | mpc -q add 2>/dev/null
+		getrnd 10 song | mpc -q add 2>/dev/null
+		#mpc -q ls mnsr/jingles | shuf -n 1 | mpc -q add 2>/dev/null
 		mpc replaygain track;
 		mpc -q crossfade 10
 		mpc -q consume on
 		mpc -q random on
 		writes voice on
-		logme "[H] added new songs."
+		logme "$(pstatus icon) added new songs."
 		;;
 	    "sima")
 		# SIMilar Artist mode:
@@ -761,21 +1001,25 @@ handle_playlist() {
 		# if only one song left in the playlist, add a random track
 		# then add similar artists for this particular track.
 		[[ -z "$(pls)" ]] && {
-		    logme "SIMA: playlist is empty"
 		    getrnd 1 song | mpc -q add 2>/dev/null
 		    mpc -q random off
 		    mpc -q --wait play
 		    sleep 0.1
 		    mpc -q volume "$(reads volume)"
-		    notify-send -u normal $'MPCW:\n'"$(getinfo artist)"' radio.'
-		    logme "[H/SIMA]: added [$(getinfo artist): $(getinfo title)]"
+		    __err -l $'MPCW:\n'"$(getinfo artist)"' radio.'
+		    local added
+		    added="$(getinfo artist): $(getinfo title)"
+		    if [[ -z $ZSH_NAME ]]; then
+			added="${added,,}"
+		    else
+			added="$(echo "$added" | awk '{print tolower($0)}')"
+		    fi
+		    logme "[sima]: added [$added]"
 		    sleep 2
 		    getsima "$(getinfo artist)" | mpc -q add 2>/dev/null
 		}
 		if [[ -z "$(getnext file)" ]]; then
-		    logme "[H/SIMA]: there's no next song"
 		    if [[ -a "$MPCW_LOCK" ]]; then
-			logme "[H/SIMA]: there's a lock!"
 			mpc -q --wait play
 			sleep 0.1
 			mpc -q volume "$(reads volume)"
@@ -784,12 +1028,10 @@ handle_playlist() {
 			notify-send -u normal $'MPCW:\n'"$(getinfo artist)"' radio.'
 		    else
 			getrnd 1 song | mpc -q add 2>/dev/null
-			logme "[H/SIMA]: added [$(getnext artist): $(getnext title)]"
+			logme "[sima]: added [$(getnext artist): $(getnext title)]"
 			getsima "$(getnext artist)" | mpc -q add 2>/dev/null
-			notify-send -u normal $'MPCW: Coming next:\n'"$(getnext artist)"' radio.'
+			__err -l $'MPCW: Coming next:\n'"$(getnext artist)"' radio.'
 		    fi
-		else
-		    logme "[H/SIMA]: there is a next song, nothing to do."
 		fi
 		mpc replaygain track;
 		mpc -q crossfade 10
@@ -797,14 +1039,16 @@ handle_playlist() {
 		mpc -q random on
 		writes voice on
 		;;
-	    *) echo "nonstop: err: something's wrong. [$mode]" >&2
+	    *) __err -u "MPCW: musicnonstop: err: something's wrong. [$mode]"
         esac
-        [[ "$(pstatus)" == "[stopped]" ]] && {
+        [[ "$(pstatus)" == "stop" ]] && {
+	    echo > "$MPCW_LOCK"
 	    local volume
 	    volume="$(reads volume)"
-            mpc -q --wait play
+            mpc -q --wait play "$@"
 	    sleep 0.1
             mpc -q volume "$volume"
+	    rm "$MPCW_LOCK"
         }
     else
         return 1
@@ -813,6 +1057,7 @@ handle_playlist() {
 
 #shellcheck disable=SC2120
 rating() {
+    ! __is_mpd_running && return 1
     local rating
     local song
     rating=0
@@ -831,49 +1076,59 @@ rating() {
 	    5) echo "*****"
 	esac
     else
-	echo "MPCW: $song ($r)"
+	__err -l "MPCW: $song ($r)"
     fi
 }
 
 unrate() {
+    ! __is_mpd_running && return 1
     mpc sticker "$(getinfo file)" delete rating 2>/dev/null
 }
 
 love() {
+    ! __is_mpd_running && return 1
     mpc sticker "$(getinfo file)" set rating 10
     rating
 }
 
 like() {
+    ! __is_mpd_running && return 1
     mpc sticker "$(getinfo file)" set rating 8
     rating
 } 
 
 tsok() {
+    ! __is_mpd_running && return 1
     mpc sticker "$(getinfo file)" set rating 6
     rating
 }
 
 soso() {
+    ! __is_mpd_running && return 1
     mpc sticker "$(getinfo file)" set rating 4
     rating
 }
 
 nope() {
+    ! __is_mpd_running && return 1
     mpc sticker "$(getinfo file)" set rating 2
     rating
 }
 
+# shellcheck disable=SC2120
 update_stats() {
-    [[ -z "$1" ]] && return
+    ! __is_mpd_running && return 1
+    [[ -z "$1" ]] && return 1
     local playcount
     mpc sticker "$1" set "lastplayed" "$(now)" 2>/dev/null
     (($(playcount)))
     ((playcount+=1))
     mpc sticker "$1" set "playcount" "$playcount" 2>/dev/null
+    echo "$(now) --- $1" >> "$MPCW_HIST"
 }
 
 reset_stats() {
+    ! __is_mpd_running && return 1
     [[ -z "$1" ]] && return
     mpc sticker "$1" delete "lastplayed" 2>/dev/null
     mpc sticker "$1" delete "playcount" 2>/dev/null
@@ -890,58 +1145,139 @@ now() {
 }
 
 status() {
+    ! __is_mpd_running && return 1
     if [[ -n "$1" ]]; then
-        case "$1" in
-	    "current") mpc current -f "%artist%: %title%"; return;;
-            "volume") mpc volume | sed '{s/volume://;s/%//;s/ //}'; return;;
-	    "repeat") arg="\$4";;
-	    "random") arg="\$6" ;;
-	    "single") arg="\$8";;
-	    "consume") arg="\$10";;
-	    "progress") mpc | awk 'NR==2 {print $3}'; return;;
-	    "help")
-		echo "MPCW: options are"
-	       	echo "MPCW: current, volume, repeat, random, single, consume, progress."
-		return
-		;;
-            *) return
-        esac
-	local nr
-	if [[ "$(pstatus)" == "[stopped]" ]]; then
-	    nr=1
-	else
-	    nr=3
-	fi
-        mpc | sed 's/:/ /' | awk "NR==$nr {print $arg}"
+	local host
+	local port
+	host="${MPD_HOST:-"localhost"}"
+	port="${MPD_PORT:-"6600"}"
+	printf 'status\n;KO\n'  \
+	| nc "$host" "$port" \
+	| awk -v var="$1" '$1==var":" {if ($2==0) print "off"; else if ($2==1) print "on"; else print $2}'
     else
-        echo "$(pstatus icon)" "$(mpc current -f "$MPCW_NTF")"
+	local file ext
+	file="$(getinfo file)"
+	ext="${file##*.}"
+	if [[ -z $ZSH_NAME ]]; then
+	    ext="${ext,,}"
+	else
+	    ext="$(echo "$ext" | awk '{print tolower($0)}')"
+	fi
+	(($(playcount)))
+	if [[ "$(pstatus)" != "stop" ]]; then
+	    local D
+	    D="$(getinfo date)"
+	    echo "$(pstatus icon) $(rating s) x$playcount [$ext]"
+	    echo "$(getinfo artist): $(getinfo title) [$(pstatus progress)]"
+	    echo "$(getinfo album) | ${D:0:4}"
+	else
+	    pstatus icon
+	fi
     fi
 }
 
 pstatus() {
-    local player_status
-    player_status=$(mpc | awk 'NR==2 {print $1}')
-    player_status=${player_status:-"[stopped]"}
+    ! __is_mpd_running && return 1
+    local state
+    state=$(status state)
     [[ -z "$1" ]] && {
-        echo "$player_status"
+        echo "$state"
         return
     }
     if [[ "$1" == "icon" ]]; then
-        case "$player_status" in 
-            "[playing]") icon="[>>";;
-            "[paused]") icon="[||";;
-	    "[stopped]") icon="[|]"
+	local icon
+        case "$state" in 
+            "play") icon="";;
+            "pause") icon="";;
+	    "stop") icon=""
         esac
-	NONSTOP="$(reads nonstop)"
-	case "$NONSTOP" in
-	    "album") icon+=" (=)";;
-	    "song") icon+=" (-)";;
-	    "sima") icon+=" (s)"
+	local mode
+	mode="$(reads nonstop)"
+	local filter
+	[[ "$(reads filter)" != "off" ]] && filter="(+)"
+	case "$mode" in
+	    "album") icon+=" [album$filter]";;
+	    "song") icon+=" [song$filter]";;
+	    "sima") icon+=" [sima]";;
+	    "off") icon+=" [norm]"
 	esac
+	declare -A __m
+	__m["repeat"]="r"
+	__m["random"]="z"
+        __m["single"]="s"
+       	__m["consume"]="c"
+	icon+=" "
+	local modes=( "repeat" "random" "single" "consume" )
+	for M in ${modes[*]}; do
+	    [[ "$(status "$M")" == "on" ]] \
+		&& icon+="${__m["$M"]}"    \
+		|| icon+="-"
+	done
+	unset __m
+	[[ -n "$(status xfade)" ]] && icon+="x" || icon+="-"
+	echo "$icon"
+    elif [[ "$1" == "progress" ]]; then
+	local duration
+	local elapsed
+	local progress
+	duration="$(status duration)"
+	[[ -z $duration ]] && return 1
+	duration="${duration//.*}"
+	elapsed="$(status elapsed)"
+	elapsed="${elapsed//.*}"
+	((progress=elapsed*100/duration))
+	echo "$progress%"
+	return
+    else
+	__err -l "MPCW: pstatus: unknown option [$*]"
     fi
-    echo "$icon"
+}
+
+set_radio_name() {
+    if [[ -n "$*" ]]; then
+	writes station "$*"
+    else
+	__err -l "usage: set_radio_name <name>"
+    fi
+}
+
+__err() {
+    local color off
+    off="$(tput sgr0)"
+    case "$1" in
+	-l)
+	    if [[ -t 1 ]]; then
+		color="$(tput setaf 2)"
+		( >&2 echo "${color}$2${off}" )
+	    else
+		notify-send -u low "$2"
+	    fi
+	    ;;
+	-n)
+	    if [[ -t 1 ]]; then
+		color="$(tput setaf 3)"
+		off="$(tput sgr0)"
+		( >&2 echo "${color}$2${off}" )
+	    else
+		notify-send -t 2000 "$2"
+	    fi
+	    ;;
+	-u)
+	    if [[ -t 1 ]]; then
+		color="$(tput setaf 1)"
+		off="$(tput sgr0)"
+		( >&2 echo "${color}$2${off}" )
+	    else
+		notify-send -u critical "$2"
+	    fi
+    esac
 }
 
 if [[ "$*" ]]; then
-    "${@:-}"
+    if 	__is_mpd_running; then
+	"${@:-}"
+    else
+	__err -u "MPCW: mpd is not running!"
+	exit 1
+    fi
 fi

@@ -9,9 +9,9 @@ mediatitle() {
     ttl="$(awk '$1~"title"{for (i=2; i<=NF; i++) printf " " $i}' "$op")"
     
     case "$sts" in
-      "[playing]") [[ -n $art ]] && echo "[>>$art:$ttl" || echo "[>>$ttl";;
-      "[paused]") [[ -n $art ]] && echo "[||$art:$ttl" || echo "[||$ttl";;
-      *) echo " [|]"
+      "play") [[ -n $art ]] && echo "$art:$ttl" || echo "$ttl";;
+      "pause") [[ -n $art ]] && echo "$art:$ttl" || echo "$ttl";;
+      *) echo " "
     esac
 }
 

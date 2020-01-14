@@ -140,9 +140,9 @@ STATISTICS:
 .br
 .SH "FILES"
 .PP
-~/.config/mpcw/config
+~/.config/mpcw/settings
 .RS 4
-Configuration file.
+Settings file.
 .RE
 .PP
 ~/.config/mpcw/hist
@@ -150,6 +150,13 @@ Configuration file.
 History file.
 .RE
 .PP
-~/.config/mpcw/mpcw.log
+~/.config/mpcw/log
 .RS 4
 Log file.
+.RE
+.PP
+$HOME/.config/mpcw/mpcw.pid
+.RE
+$HOME/.config/mpcw/mpcw.wpid
+.RS 4
+Daemon PID files
