@@ -71,7 +71,7 @@ stalker() {
     while :; do
 
 	! __is_mpd_running && {
-	    __err -u "MPCWD: mpd is not running"
+	    __err -u "[MPCWD] mpd is not running"
 	    logme "[fatal] mpd is not running!"
 	    logme "[fatal] pausing daemon!"
 	    __err -n "[|| daemon is paused."
@@ -86,7 +86,7 @@ stalker() {
 	    handler &
 	    disown
 	    echo $! > "$MPCW_PID"
-	    __err -n "MPCWD: mpcw daemon restarted"
+	    __err -n "[MPCWD] mpcw daemon restarted"
 	    media_update
 	    logme "[daemon] restarted."
 	}
