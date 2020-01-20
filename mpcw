@@ -694,7 +694,7 @@ __get_songs() {
 	    artist="${artist/\ /""}"
 
 	    [[ -n "${songs["$song"]}" ]] && continue
-	    [[ -n "${artists["$artist"]}" ]] && __err -l "skipped" && continue
+	    [[ -n "${artists["$artist"]}" ]] && continue
 
 	    if ! __is_in_history "$song" && ! __is_in_playlist "$song"; then
 		#if [[ -z $MPCW_FILTER ]] && [[ -z $value ]]; then

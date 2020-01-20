@@ -24,7 +24,7 @@ As you rate the songs, playlists are automatically generated according to your m
 *Dependencies: mpd, mpc, dunst, wget, jq, sqlite3, font awesome.*  
 *Optional dependencies: espeak and mpv (for voice over).*
 
-*Note: **MPCW** assumes songs are stored in directories such as "**artist/album**".*
+*Note: **MPCW** assumes songs are stored in an "**artist/album**" directory structure.*
 
 
 
@@ -45,7 +45,7 @@ then install **MPCW**:
 **MPCW** consists in three *bash scripts*:
 
 - **mpcw**, which contains **commands** and **aliases**,
-- **mpcwd**, the **daemon** that handles of **notifications**, **playlists** and **statistics**.
+- **mpcwd**, the **daemon** that handles **notifications**, **playlists** and **statistics**.
 - **mpcwt**, meant to be used as a module in *polybar* (or similar).
 
 **mpcw** script has to be sourced in your .bashrc file.  
@@ -102,7 +102,7 @@ Also, it is possible to call **MPCW** functions (ie. as keyboard shortcuts to be
 |prev              |**pv**           |Go to **previous song**.|                                    |
 |skip              |**sk**           |**Skip current song**.
 |-                 |**seek** POSITION|**Seek through** current song (use percentage, seconds, or hh:mm:ss).
-|play_album [ARTIST] [ALBUM]         |**pla**    |**Play current song's album**.<br>If an artist and an album name are provided, album plays immediately.<br>Go back to **music non-stop** song mode when album is over.
+|play_album [ARTIST ALBUM]         |**pla**    |**Play current song's album**.<br>If an artist and an album name are provided, album plays immediately.<br>Go back to **music non-stop** song mode when album is over.
 |add_album         |**aa**           |Add current song's album.<br>Go back to **music non-stop** song mode when album is over.
 |ins_album ARTIST ALBUM              |**insa**|**Add an album after current song**.<br>Go back to **music non-stop** mode when album is over.
 |next_album        |**nxa**          |When in album mode, **play another random album**.
@@ -161,7 +161,7 @@ This information are also visible in notifications.
 |-         |**del** [FROM_]POS [-TO_POS]|Delete song(s) from the playlist.
 |crop      |**cr**                      |Crop playlist. Delete all songs except current one.
 |**clr**   |-                           |Clear playlist. If song, album or SIMA mode is enabled, new tracks are added to the playlist.
-|getrnd COUNT SONG\|ALBUM|**rnd**       |Return COUNT song(s) or album(s).
+|getrnd COUNT song\|album|**rnd**       |Return COUNT song(s) or album(s).
 |see_album |**cl**                      |Display album for the currently playing song.
 |see_artist|**ca**                      |Display albums for the currently playing artist.
 |status    |**si**                      |Display current song info.
