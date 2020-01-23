@@ -142,7 +142,6 @@ __say() {
     [[ $(reads voice) == "off" ]] && return
     [[ $(pstatus) != "play" ]] && return
     [[ "$(getinfo file)" = *[![:ascii:]]* ]] && return
-    #[[ $(getinfo album) == "MNSR Jingles" ]] && return
     local duration
     duration="$(status duration)"
     duration="${duration//.*}"
@@ -415,21 +414,36 @@ see_artist() {
 
 next_album() {
     ! __is_mpd_running && return 1
-    if [[ $(pstatus) == "play" &&
-	$(reads nonstop) == "album" ]]; then
-        clr
+    if [[ $(pstatus) == "play" ]]; then
+	if [[ $(reads nonstop) == "album" ]]; then
+	    clr
+	else
+	    __err -n "[MPCW] not in album mode!"
+	fi
     else
-	__err -n "[MPCW] not in album mode!"
+	__err -n "[MPCW] not playing."
     fi
 }
 
 __is_in_history() {
-    grep -Fq "$1" "$MPCW_HIST" 2>/dev/null
-    return $?
+    local uri
+    [[ "$1" == "--album" ]] && uri="$2" || uri="$1"
+    local freq
+    local D0 D1 D2
+    freq="$(reads clean)"
+    if [[ "$1" == "--album" ]]; then
+	D0="$(__search_most_recently_played "$uri")"
+    else
+	D0="$(__search_by_uri "=\"$uri\"" "lastplayed")"
+    fi
+    [[ -z $D0 ]] && return 1
+    D0="${D0%% *}"
+    D1="$(date -d "$D0" "+%s")"
+    D2="$(date -d "now -$freq" "+%s")"
+    [[ $D1 -ge $D2 ]] && return 0 || return 1
 }
 
 __is_in_playlist() {
-    ! __is_mpd_running && return 1
     local TMPCUR
     TMPCUR="$(mktemp)"
     mpc playlist -f "%file%" > "$TMPCUR"
@@ -501,12 +515,12 @@ ORDER BY uri;
 END_SQL
 }
 
-__search_by_name() {
+__search_most_recently_played() {
 
 sqlite3 "$STICKER_DB" <<SQL
 .timeout 2000
-SELECT uri, value FROM sticker
-WHERE name="$1"
+SELECT MAX(value) FROM sticker
+WHERE uri LIKE "$1%" AND name="lastplayed"
 ORDER BY uri;
 SQL
 }
@@ -728,11 +742,9 @@ __get_one_album() {
     local prev_artist
     local match=0
     artist_count="$(mpc ls | wc -l)"
-    if [[ -t 1 ]]; then
-	__err -l "[MPCW] searching album(s)..."
-    else
-	dunstify -r 777 "[MPCW] searching album(s)..."
-    fi
+
+    __err -l "[MPCW] searching album(s)..."
+
     while [ "$match" -eq 0 ]; do
 	if [[ -z "$*" ]]; then
 	    [[ "$artist_count" == 0 ]] && {
@@ -744,7 +756,7 @@ __get_one_album() {
 	    album_count="$(mpc ls "$artist" | wc -l)"
 	    while [ "$album_count" -gt 0 ]; do
 		album="$(mpc ls "$artist" | shuf -n 1)"
-		if ! __is_in_history "$album"; then
+		if ! __is_in_history --album "$album"; then
 		    match=1
 		    break
 		else
@@ -1203,13 +1215,13 @@ now() {
 status() {
     ! __is_mpd_running && return 1
     if [[ -n "$1" ]]; then
-	local host
-	local port
-	host="${MPD_HOST:-"localhost"}"
-	port="${MPD_PORT:-"6600"}"
-	printf 'status\n;KO\n'  \
-	| nc "$host" "$port" \
-	| awk -v var="$1" '$1==var":" {if ($2==0) print "off"; else if ($2==1) print "on"; else print $2}'
+	#local host
+	#local port
+	#host="${MPD_HOST:-"localhost"}"
+	#port="${MPD_PORT:-"6600"}"
+	#printf 'status\n;KO\n'  \
+	#| nc "$host" "$port" \
+	__send_cmd "status" | awk -v var="$1" '$1==var":" {if ($2==0) print "off"; else if ($2==1) print "on"; else print $2}'
     else
 	local file ext
 	file="$(getinfo file)"
