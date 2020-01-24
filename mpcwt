@@ -1,31 +1,35 @@
 #! /usr/bin/bash
 
+#######################################
+#                                _    #
+#  _ __ ___  _ __   _____      _| |_  #
+# | '_ ` _ \| '_ \ / __\ \ /\ / / __| #
+# | | | | | | |_) | (__ \ V  V /| |_  #
+# |_| |_| |_| .__/ \___| \_/\_/  \__| #
+#           |_|                       #
+#######################################
+
+MEDIAFILE="$HOME/.config/currentmedia"
 declare PID
 
-mediatitle() {
-    op="$HOME/.config/currentmedia"
-    sts="$(awk '$1~"status"{print $2}' "$op")"
-    art="$(awk '$1~"artist"{for (i=2; i<=NF; i++) printf " " $i}' "$op")"
-    ttl="$(awk '$1~"title"{for (i=2; i<=NF; i++) printf " " $i}' "$op")"
-    
-    case "$sts" in
-      "play") [[ -n $art ]] && echo "$art:$ttl" || echo "$ttl";;
-      "pause") [[ -n $art ]] && echo "$art:$ttl" || echo "$ttl";;
-      *) echo " "
+read_media() {
+    local S A T msg
+    S="$(awk '$1=="status" {print $2}' "$MEDIAFILE")"
+    A="$(awk '$1=="artist" {$1=""; print}' "$MEDIAFILE")"
+    T="$(awk '$1=="title" {$1=""; print}' "$MEDIAFILE")"
+    A="${A/ /""}"
+    case "$S" in
+	play)  S="";;
+	pause) S="";;
+	*)     S=""
     esac
-}
-
-scroll() {
-    [[ -n $PID ]] && {
-	kill "$PID" 2>/dev/null
-        PID=""
-    }
-    scroller -b "|" -t "$(mediatitle)" -e "|" &
+    msg="$(printf '%s:%s' "$A" "$T")"
+    [[ -n $PID ]] && 
+	ps --no-header --pid "$PID" && kill "$PID"
+    scroller -b "| $S" -t "$msg" -e " |" &
     PID=$!
 }
 
-scroll
+read_media
 trap '{ kill $PID 2>/dev/null; }' EXIT
-trap scroll SIGHUP
-
-while true; do read -r; done
+while read -r; do read_media; done< <(entr -p date <<< "$MEDIAFILE")

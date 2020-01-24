@@ -3,7 +3,6 @@
 usage() {
     echo "Usage: ${0##*/} [-h] [-l <length>] [-d <delay>] [-b <text>] [-e <text>] [-s <separator>] -t [text]"
     echo
-    echo
     echo "Options:"
     echo "-h	display this help and exits."
     echo "-l	maximum text length (default is 45 characters)."

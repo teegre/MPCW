@@ -173,7 +173,6 @@ stopd() {
 	kill "$pid" 2>/dev/null
 	sleep 1
 	echo  > "$HOME/.config/currentmedia"
-	killall -s HUP "mpcwt" 2>/dev/null
 	__err -n "[|] mpcw daemon stopped."
 	return 0
     fi

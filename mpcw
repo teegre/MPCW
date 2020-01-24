@@ -134,7 +134,6 @@ media_update() {
             mpc current -f "$ntf_fmt"
         } > "$HOME/.config/currentmedia"
     fi
-    killall -s HUP "mpcwt" 2>/dev/null
 }
 
 __say() {
@@ -1147,37 +1146,55 @@ rating() {
 
 unrate() {
     ! __is_mpd_running && return 1
+    local song
+    song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" delete rating 2>/dev/null
+    __err -n "[MPCW] unrated $song"
 }
 
 love() {
     ! __is_mpd_running && return 1
+    (($(rating n)))
+    local song
+    song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" set rating 10
-    rating
+    __err -n "[MPCW] $song ($rating → 10)"
 }
 
 like() {
     ! __is_mpd_running && return 1
+    (($(rating n)))
+    local song
+    song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" set rating 8
-    rating
-} 
+    __err -n "[MPCW] $song ($rating → 8)"
+}
 
 tsok() {
     ! __is_mpd_running && return 1
+    (($(rating n)))
+    local song
+    song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" set rating 6
-    rating
+    __err -n "[MPCW] $song ($rating → 6)"
 }
 
 soso() {
     ! __is_mpd_running && return 1
+    (($(rating n)))
+    local song
+    song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" set rating 4
-    rating
+    __err -n "[MPCW] $song ($rating → 2)"
 }
 
 nope() {
     ! __is_mpd_running && return 1
+    (($(rating n)))
+    local song
+    song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" set rating 2
-    rating
+    __err -n "[MPCW] $song ($rating → 1)"
 }
 
 # shellcheck disable=SC2120
