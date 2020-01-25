@@ -13,20 +13,20 @@ MEDIAFILE="$HOME/.config/currentmedia"
 declare PID
 
 read_media() {
-    local S A T msg
+    local S A T icon msg
     S="$(awk '$1=="status" {print $2}' "$MEDIAFILE")"
     A="$(awk '$1=="artist" {$1=""; print}' "$MEDIAFILE")"
     T="$(awk '$1=="title" {$1=""; print}' "$MEDIAFILE")"
     A="${A/ /""}"
     case "$S" in
-	play)  S="";;
-	pause) S="";;
-	*)     S=""
+	play)  icon="";;
+	pause) icon="";;
+	*)     icon=""
     esac
-    msg="$(printf '%s:%s' "$A" "$T")"
+    [[ $S != "play" && $S != "pause" ]] && msg="---" || msg="$(printf '%s:%s' "$A" "$T")"
     [[ -n $PID ]] && 
 	ps --no-header --pid "$PID" && kill "$PID"
-    scroller -b "| $S" -t "$msg" -e " |" &
+    scroller -b "| $icon" -t "$msg" -e " |" &
     PID=$!
 }
 
