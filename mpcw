@@ -1158,7 +1158,7 @@ love() {
     local song
     song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" set rating 10
-    __err -n "[MPCW] $song ($rating → 10)"
+    __err -n "[MPCW] $song ($rating → 5)"
 }
 
 like() {
@@ -1167,7 +1167,7 @@ like() {
     local song
     song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" set rating 8
-    __err -n "[MPCW] $song ($rating → 8)"
+    __err -n "[MPCW] $song ($rating → 4)"
 }
 
 tsok() {
@@ -1176,7 +1176,7 @@ tsok() {
     local song
     song="$(mpc current -f "%artist%: %title%" | awk '{print tolower($0)}')"
     mpc sticker "$(getinfo file)" set rating 6
-    __err -n "[MPCW] $song ($rating → 6)"
+    __err -n "[MPCW] $song ($rating → 3)"
 }
 
 soso() {
