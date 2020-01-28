@@ -176,7 +176,7 @@ __say() {
 		fi
 		local new_vol=$((volume-volume*30/100))
 		mpc -q volume  "$new_vol" 
-		mpv --no-terminal --volume "$volume" "$TMPWAV"
+		mpv --no-terminal --volume="$volume" "$TMPWAV"
 		mpc -q volume "$volume"
 		rm "$TMPWAV"
 	    fi
@@ -669,7 +669,9 @@ __get_songs() {
     declare -A songs
     declare -A artists
     local artist song
+    local t_start
     
+    t_start=$(date '+%s')
     C=$1
     value="$2"
 
@@ -677,8 +679,10 @@ __get_songs() {
 
     # artists in the queue
     while read -r a; do
+	a="${a/\ /""}"
 	artists["$a"]=1
     done < <(__send_cmd playlistinfo | awk '$1=="Artist:" {$1=""; print tolower($0)}')
+
 
     if [[ -n $value ]]; then
 	total="$(__search_uri "rating" "=$value" | wc -l)"
@@ -695,6 +699,17 @@ __get_songs() {
     while [ $count -lt "$C" ] && [ "$total" -gt 0 ]; do
 
 	while [ $match -eq 0 ]; do
+
+	    ((t_end=$(date '+%s')-t_start))
+
+	    if [[ $t_end -ge 30 ]]; then
+		__err -n "[MPCW] operation takes too long."
+		logme "[get] too long!"
+		[[ -n $value ]] && unset value
+		[[ -n $MPCW_FILTER ]] && unset MPCW_FILTER
+		t_start=$(date '+%s')
+	    fi
+
 	    if [[ -n $MPCW_FILTER ]]; then
 		song="$(search_tag "${MPCW_FILTER[@]}" | shuf -n 1)"
 	    elif [[ -n $value ]]; then
@@ -741,8 +756,9 @@ __get_one_album() {
     local prev_artist
     local match=0
     artist_count="$(mpc ls | wc -l)"
+    album_count=
 
-    __err -l "[MPCW] searching album(s)..."
+    __err -l "[MPCW] searching album."
 
     while [ "$match" -eq 0 ]; do
 	if [[ -z "$*" ]]; then
@@ -1021,7 +1037,6 @@ __filter() {
 	IFS=$'\n' read -d "" -ra MPCW_FILTER <<< "${f//'::'/$'\n'}"
     fi
 }
-
 
 handle_playlist() {
     # handle playlist in non-stop mode
