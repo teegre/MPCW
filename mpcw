@@ -702,12 +702,10 @@ __get_songs() {
 
 	    ((t_end=$(date '+%s')-t_start))
 
-	    if [[ $t_end -ge 30 ]]; then
+	    if [[ $t_end -ge 10 ]]; then
 		__err -n "[MPCW] operation takes too long."
 		logme "[get] too long!"
-		[[ -n $value ]] && unset value
-		[[ -n $MPCW_FILTER ]] && unset MPCW_FILTER
-		t_start=$(date '+%s')
+		return $count
 	    fi
 
 	    if [[ -n $MPCW_FILTER ]]; then
