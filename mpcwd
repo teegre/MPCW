@@ -43,10 +43,20 @@ handler() {
 		local T
 		T="$(date '+%M')"
 		if [[ "$T" == "00" || "$T" == "15" || "$T" == "30" || "$T" == "45" ]]; then
-		    __say time
+		    if __say time; then
+		       writes voice off
+		    elif [[ "$(reads nonstop)" == "song" && "$(status random)" == "on" ]]; then 
+		       writes voice on
+		    fi
 		else
 		    local n=$((RANDOM%10))
-		    [[ $n == 5 ]] && __say &
+		    if [[ $n == 5 ]]; then
+			if __say; then
+			    writes voice off
+			elif [[ "$(reads nonstop)" == "song" && "$(status random)" == "on" ]]; then
+			    writes voice on
+			fi
+		    fi
 		fi
 	    fi
 	elif [[ "$nonstop" == "off" ]]; then

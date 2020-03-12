@@ -138,13 +138,13 @@ media_update() {
 
 __say() {
     # say current artist and title.
-    [[ $(reads voice) == "off" ]] && return
-    [[ $(pstatus) != "play" ]] && return
-    [[ "$(getinfo file)" = *[![:ascii:]]* ]] && return
+    [[ $(reads voice) == "off" ]] && return 1
+    [[ $(pstatus) != "play" ]] && return 1
+    [[ "$(getinfo file)" = *[![:ascii:]]* ]] && return 1
     local duration
     duration="$(status duration)"
     duration="${duration//.*}"
-    [[ $duration -lt 120 ]] && return
+    [[ $duration -lt 120 ]] && return 1
     local TMPWAV
     TMPWAV="$(mktemp)"
     local radio
@@ -179,8 +179,11 @@ __say() {
 		mpv --no-terminal --volume="$volume" "$TMPWAV"
 		mpc -q volume "$volume"
 		rm "$TMPWAV"
+		return 0
 	    fi
+	    return 1
 	}
+    return 1
     }
 }
 
@@ -379,10 +382,12 @@ ins_album() {
 	mpc -q replaygain album
 	mpc -q crop
 	mpc -q add <<< "$result"
-	[[ "$play_now" == 1 ]] && {
+	if [[ "$play_now" == 1 ]]; then
 	    mpc -q play 2 && mpc del 1
 	    logme "[play][album] $(pstatus icon)"
-	} || logme "[ins][album] $(pstatus icon)"
+	else
+	    logme "[ins][album] $(pstatus icon)"
+	fi
 	writes voice off
     else
 	__err -l "[MPCW] nothing found."
@@ -984,13 +989,14 @@ pls() {
     PLAYLIST="$(mktemp)"
     pos="$(mpc current -f "%position%")"
     fmt="%artist% \ %title% \ %album%"
-    mpc playlist -f "$fmt" | awk '{print NR "\\" $0}' | sed "s/^$pos\\\/[>\\\/" > "$PLAYLIST"
+    mpc playlist -f "$fmt" | awk '{print NR "→" $0}' | sed "s/^$pos\\\/[>\\\/" > "$PLAYLIST"
 
     column \
         -d -N "pos,artist,title,album" \
 	-T "artist,title,album" \
 	-c "$cols" \
-	-t -s "\\" -o "| " "$PLAYLIST" | less -F
+	-t -s "→" \
+	-o "| " "$PLAYLIST" | less -F
     rm "$PLAYLIST" 2>/dev/null
 }
 
@@ -1043,7 +1049,6 @@ handle_playlist() {
     mode="$(reads nonstop)"
     [[ "$(mpc playlist | wc -l)" -gt 1 ]] && return 1
     if [[ "$mode" != "off" ]] && [[ -z "$(getnext file)" || "$(mpc playlist | wc -l)" == 0 ]]; then
-	logme "[playlist] $0"
         case "$mode" in
             "album")
 		local album
