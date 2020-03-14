@@ -117,7 +117,8 @@ stalker() {
 
 	    if [[ "$elapsed" == "$duration" && -n "$song" ]]; then
 		! update_stats "$song" && logme "[warning] could not update stats for $song"
-		mpc idle player >/dev/null
+		sleep 1
+		#mpc idle player >/dev/null
 	    else
 		sleep 0.125
 	    fi

@@ -67,7 +67,8 @@ alias llog="clear; tail -f ${MPCW_LOG}"
 #
 
 __is_mpd_running() {
-    (>/dev/null pgrep "mpd$") && return 0 || return 1
+    return 0
+    #(>/dev/null pgrep "mpd$") && return 0 || return 1
 }
 
 __send_cmd() {
@@ -988,7 +989,7 @@ pls() {
     local PLAYLIST
     PLAYLIST="$(mktemp)"
     pos="$(mpc current -f "%position%")"
-    fmt="%artist% \ %title% \ %album%"
+    fmt="%artist% → %title% → %album%"
     mpc playlist -f "$fmt" | awk '{print NR "→" $0}' | sed "s/^$pos\\\/[>\\\/" > "$PLAYLIST"
 
     column \
