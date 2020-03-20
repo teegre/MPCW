@@ -708,8 +708,8 @@ __get_songs() {
 
 	    ((t_end=$(date '+%s')-t_start))
 
-	    if [[ $t_end -ge 10 ]]; then
-		__err -n "[MPCW] operation takes too long."
+	    if [[ $t_end -ge 5 ]]; then
+		#__err -n "[MPCW] operation takes too long."
 		logme "[get] too long!"
 		return $count
 	    fi
@@ -990,7 +990,7 @@ pls() {
     PLAYLIST="$(mktemp)"
     pos="$(mpc current -f "%position%")"
     fmt="%artist% → %title% → %album%"
-    mpc playlist -f "$fmt" | awk '{print NR "→" $0}' | sed "s/^$pos\\\/[>\\\/" > "$PLAYLIST"
+    mpc playlist -f "$fmt" | awk '{print NR "→" $0}' | sed "s_^$pos→_[>→_" > "$PLAYLIST"
 
     column \
         -d -N "pos,artist,title,album" \
