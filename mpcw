@@ -151,7 +151,7 @@ __say() {
     local radio
     radio="$(reads station)"
     [[ -n "$radio" ]] && {
-	type espeak >/dev/null && {
+	type espeak >/dev/null 2>&1 && {
 	    local artist
 	    artist="$(getinfo artist)"
 	    local title
@@ -396,6 +396,22 @@ ins_album() {
     fi
     return 0
 }    
+
+aaa() {
+    local result
+    [[ -z "$1" || -z "$2" ]] && {
+	__err -l "[MPCW] aaa ARTIST ALBUM"
+        return 1
+    }
+    result="$(search_tag artist "$1" album "$2")"
+    if [[ -z "$result" ]]; then
+	__err -l "[MPCW] nothing found."
+	return 1
+    else
+	mpc -q add <<< "$result"
+	return 0
+    fi
+}
 
 see_album() {
     # display current song's album.
@@ -685,9 +701,10 @@ __get_songs() {
 
     # artists in the queue
     while read -r a; do
-	a="${a/\ /""}"
+	a="${a/ /}"
 	artists["$a"]=1
     done < <(__send_cmd playlistinfo | awk '$1=="Artist:" {$1=""; print tolower($0)}')
+
 
 
     if [[ -n $value ]]; then
@@ -708,7 +725,7 @@ __get_songs() {
 
 	    ((t_end=$(date '+%s')-t_start))
 
-	    if [[ $t_end -ge 5 ]]; then
+	    if [[ $t_end -ge 7 ]]; then
 		#__err -n "[MPCW] operation takes too long."
 		logme "[get] too long!"
 		return $count
@@ -1360,7 +1377,6 @@ __err() {
 	-n)
 	    if [[ -t 1 ]]; then
 		color="$(tput setaf 3)"
-		off="$(tput sgr0)"
 		( >&2 echo "${color}$2${off}" )
 	    else
 		notify-send -t 2000 "$2"
@@ -1369,7 +1385,6 @@ __err() {
 	-u)
 	    if [[ -t 1 ]]; then
 		color="$(tput setaf 1)"
-		off="$(tput sgr0)"
 		( >&2 echo "${color}$2${off}" )
 	    else
 		notify-send -u critical "$2"
